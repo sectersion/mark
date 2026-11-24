@@ -1,5 +1,6 @@
 import { logger } from '../lib/logger';
 import { registerAppHome } from './app-home';
+import { registerApprovals } from './approvals';
 import { slack } from './client';
 import { content } from './content';
 import {
@@ -22,6 +23,7 @@ export function registerEvents(): void {
   );
 
   registerAppHome();
+  registerApprovals();
 
   bot.onAction('opt_in_accept', acceptOptIn);
 

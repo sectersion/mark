@@ -52,3 +52,5 @@ export const workingModel = {
 };
 
 export const emoji = { listTtl: 5 * 60 * 1000 };
+
+export const approval = { ttl: 24 * 60 * 60 * 1000 };

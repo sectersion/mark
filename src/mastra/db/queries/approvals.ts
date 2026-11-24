@@ -44,6 +44,21 @@ export async function createApproval({
   return approval;
 }
 
+export async function setApprovalCard({
+  id,
+  channel,
+  ts,
+}: {
+  id: string;
+  channel: string;
+  ts: string;
+}): Promise<void> {
+  await db
+    .update(approvals)
+    .set({ cardChannel: channel, cardTs: ts })
+    .where(eq(approvals.id, id));
+}
+
 export async function resolveApproval({
   id,
   decision,

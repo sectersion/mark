@@ -10,6 +10,7 @@ import { exploreAgent as explore } from './agents/explore';
 import orchestrator from './agents/orchestrator';
 import { researchAgent as research } from './agents/research';
 import { summarizer } from './agents/summarizer';
+import { sweepApprovals } from './chat/approvals';
 import { registerEvents } from './chat/events';
 import { setChat } from './chat/instance';
 import { setMastra } from './chat/mastra-instance';
@@ -93,6 +94,8 @@ orchestrator
     }
     setChat(sdk);
     registerEvents();
+    // ponytail: setInterval, single process
+    setInterval(sweepApprovals, 5 * 60 * 1000);
     await buildAllowlist();
     logger.info('[agent] online');
   })
