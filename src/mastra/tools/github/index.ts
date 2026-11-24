@@ -26,7 +26,7 @@ export async function githubTools({
     if (access.state !== 'connected') {
       return {};
     }
-    const { credential, direct, level } = access;
+    const { credential, direct, level, paused } = access;
 
     const built = createGithubTools({
       token: async () => {
@@ -44,6 +44,9 @@ export async function githubTools({
     for (const name of ALLOWLIST) {
       // An app structurally cannot fork a repository it is not installed on.
       if (name === 'forkRepository' && credential.kind !== 'pat') {
+        continue;
+      }
+      if (paused && isWriteTool(name)) {
         continue;
       }
       // The SDK's formatter is AI SDK shaped; Mastra hands it the result alone.
@@ -81,11 +84,13 @@ export async function githubTools({
         approval: !isDM || asksBefore({ kind: 'read', level }),
         userId,
       });
-      tools.github_push_branch = pushTool({
-        approval: asksBefore({ kind: 'write', level }),
-        canFork: credential.kind === 'pat',
-        userId,
-      });
+      if (!paused) {
+        tools.github_push_branch = pushTool({
+          approval: asksBefore({ kind: 'write', level }),
+          canFork: credential.kind === 'pat',
+          userId,
+        });
+      }
     }
     return tools;
   } catch (error) {

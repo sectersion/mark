@@ -3,6 +3,7 @@ import { getGitHubCredential } from '../../db/queries/github';
 import { getGitHubSettings } from '../../db/queries/settings';
 import type { GitHubCredential, GitHubPermission } from '../../types';
 import { logger } from '../logger';
+import { isPaused } from '../pause';
 
 type GitHubAccess =
   | { state: 'unreadable' }
@@ -12,6 +13,7 @@ type GitHubAccess =
       credential: GitHubCredential;
       direct: boolean;
       level: GitHubPermission;
+      paused: boolean;
     };
 
 export function levelsFor(outsideDM: boolean): GitHubPermission[] {
@@ -27,10 +29,12 @@ async function read({
 }): Promise<GitHubAccess> {
   let credential: GitHubCredential | undefined;
   let settings: Awaited<ReturnType<typeof getGitHubSettings>>;
+  let paused: boolean;
   try {
-    [credential, settings] = await Promise.all([
+    [credential, settings, paused] = await Promise.all([
       getGitHubCredential(userId),
       getGitHubSettings(userId),
+      isPaused(),
     ]);
   } catch (error) {
     logger.warn('[github] could not read the connection', { error, userId });
@@ -48,6 +52,7 @@ async function read({
     level: levelsFor(!isDM).includes(settings.permission)
       ? settings.permission
       : 'write',
+    paused,
   };
 }
 
