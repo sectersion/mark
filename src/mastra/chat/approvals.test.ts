@@ -1,7 +1,35 @@
 import { expect, test } from 'bun:test';
-import { buttonDecision, escapeMrkdwn } from './approvals';
+import type { Approval } from '../types';
+import { buttonDecision, escapeMrkdwn, expiredByPress } from './approvals';
 
 const id = '0b6f1c8e-3f5a-4d2b-9c1e-7a8b9c0d1e2f';
+
+const expiredRequest: Approval = {
+  id,
+  kind: 'request',
+  status: 'expired',
+  payload: { summary: 'can we move the call', wantsReply: true },
+  requesterId: 'UOTHER',
+  replyThread: 'slack:C1:1.1',
+  cardChannel: 'D1',
+  cardTs: '1.2',
+  createdAt: new Date(0),
+  expiresAt: new Date(0),
+  decidedAt: null,
+};
+
+test('expiredByPress returns the row only when the press expired it', () => {
+  expect(expiredByPress({ result: 'expired', approval: expiredRequest })).toBe(
+    expiredRequest
+  );
+  expect(expiredByPress({ result: 'expired' })).toBeUndefined();
+  expect(
+    expiredByPress({ result: 'ok', approval: expiredRequest })
+  ).toBeUndefined();
+  expect(expiredByPress({ result: 'already_resolved' })).toBeUndefined();
+  expect(expiredByPress({ result: 'not_found' })).toBeUndefined();
+  expect(expiredByPress({ result: 'forbidden' })).toBeUndefined();
+});
 
 test('buttonDecision reads the decision and approval id from a button', () => {
   expect(buttonDecision({ actionId: 'approval_approve', value: id })).toEqual({

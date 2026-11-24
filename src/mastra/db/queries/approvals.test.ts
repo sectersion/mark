@@ -104,8 +104,18 @@ test.skipIf(noDb)(
       decision: 'approved',
       deciderId: 'UOWNER',
     });
-    expect(result).toEqual({ result: 'expired' });
+    expect(result.result).toBe('expired');
+    expect(result.result === 'expired' && result.approval).toMatchObject({
+      id: approval.id,
+      status: 'expired',
+    });
     expect(await statusOf(approval.id)).toBe('expired');
+    const again = await resolveApproval({
+      id: approval.id,
+      decision: 'approved',
+      deciderId: 'UOWNER',
+    });
+    expect(again).toEqual({ result: 'expired' });
   }
 );
 

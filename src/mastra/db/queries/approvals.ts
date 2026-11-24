@@ -121,11 +121,14 @@ async function decide({
   if (existing.status !== 'pending') {
     return { result: 'already_resolved' };
   }
-  await db
+  const [flipped] = await db
     .update(approvals)
     .set({ status: 'expired' })
-    .where(and(eq(approvals.id, id), eq(approvals.status, 'pending')));
-  return { result: 'expired' };
+    .where(and(eq(approvals.id, id), eq(approvals.status, 'pending')))
+    .returning();
+  return flipped
+    ? { result: 'expired', approval: approvalSchema.parse(flipped) }
+    : { result: 'expired' };
 }
 
 export async function expireApprovals({

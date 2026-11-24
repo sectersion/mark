@@ -7,7 +7,12 @@ import {
   setApprovalCard,
 } from '../db/queries/approvals';
 import { logger } from '../lib/logger';
-import type { Approval, ApprovalDecision, ApprovalKind } from '../types';
+import type {
+  Approval,
+  ApprovalDecision,
+  ApprovalKind,
+  ResolveApprovalResult,
+} from '../types';
 import { slack } from './client';
 import { chat } from './instance';
 
@@ -60,6 +65,12 @@ export function buttonDecision({
     decision:
       parsed.data.actionId === actionIds.approve ? 'approved' : 'declined',
   };
+}
+
+export function expiredByPress(
+  outcome: ResolveApprovalResult
+): Approval | undefined {
+  return outcome.result === 'expired' ? outcome.approval : undefined;
 }
 
 export async function postApprovalCard({
@@ -133,6 +144,10 @@ async function onApprovalClick(event: ActionEvent): Promise<void> {
     } catch (error) {
       logger.warn('[approvals] stale reply failed', { error });
     }
+    const expired = expiredByPress(outcome);
+    if (expired) {
+      await tellExpired(expired);
+    }
     return;
   }
   const label =
@@ -201,19 +216,20 @@ async function tellRequester({
     );
 }
 
+async function tellExpired(approval: Approval): Promise<void> {
+  if (approval.kind !== 'request') {
+    return;
+  }
+  await tellRequester({
+    replyThread: approval.replyThread,
+    text: "didn't hear back, sorry",
+  });
+}
+
 export async function sweepApprovals(): Promise<void> {
   try {
     const expired = await expireApprovals({ now: new Date() });
-    await Promise.all(
-      expired
-        .filter((approval) => approval.kind === 'request')
-        .map((approval) =>
-          tellRequester({
-            replyThread: approval.replyThread,
-            text: "didn't hear back, sorry",
-          })
-        )
-    );
+    await Promise.all(expired.map(tellExpired));
   } catch (error) {
     logger.error('[approvals] expiry sweep failed', { error });
   }

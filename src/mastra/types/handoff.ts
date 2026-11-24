@@ -57,7 +57,10 @@ export type Approval = z.infer<typeof approvalSchema>;
 
 export type ResolveApprovalResult =
   | { result: 'ok'; approval: Approval }
-  | { result: 'forbidden' | 'already_resolved' | 'expired' | 'not_found' };
+  // `approval` is set only when this call is the one that marked it expired,
+  // so the requester is told exactly once (the sweep covers the rest).
+  | { result: 'expired'; approval?: Approval }
+  | { result: 'forbidden' | 'already_resolved' | 'not_found' };
 
 export const auditActorSchema = z.enum([
   'mark',
