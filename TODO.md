@@ -9,6 +9,16 @@ product backlog and is not expected to survive a fork.
 
 > **Split note (2026-09-13):** this session is on two stacked branches. `github-setup` has everything except backgrounding and the trim-payloads span processor; those two live on the `background` branch, stacked on top and not merging yet. The Backgrounding section and the background live-verify items below track that branch, not this one.
 
+## mark (2026-11-24)
+
+Design: [docs/superpowers/specs/2026-11-24-mark-design.md](./docs/superpowers/specs/2026-11-24-mark-design.md).
+
+- [ ] **Owner approves the mark design**, then a build plan (schemas shown for sign-off first).
+- [ ] Owner sets meeting hours and a free/busy allowlist (briefing defaults to 7:30 AM America/Chicago).
+- [ ] Issue mark a GitHub token that can push branches and open PRs but cannot merge.
+- [x] Branch protection on `main` (1 approving review, no force push, no deletion, admin bypass on), 2026-11-24.
+- [x] README rewritten for mark, 2026-11-24. Note: log line `[gorkie] online`, `vmc/gorkie`, and `gorkie@agentmail.to` are not renamed yet.
+
 ## CRITICAL (2026-09-13)
 
 - [ ] **Native streaming silently loses whole replies (this is the "blank responses" bug).** On a long turn (model ladder retrying for minutes), the Slack native-streaming placeholder is expired by Slack; the finalize `ChatStreamer.stop` -> `chat.stopStream` then returns `message_not_found` (and a sibling streaming write returns `not_authorized` with `acceptedScopes:["chat:write"]`, same event, not a scope bug). Verified via the `@chat-adapter/slack` source (`node_modules/@chat-adapter/slack/dist/index.js` ~4143): when `fallback.nativeRendered` is true the `stop()` catch **rethrows** instead of re-posting; Mastra's buffered fallback (`@mastra/core` `openSession`, agent bundle ~19361-19410) then reconstructs from an **already-drained buffer** and posts nothing. Net: the streamed message vanishes and the user gets no reply. gorkie does NOT delete the placeholder (swept `src/mastra/**`, no chat.delete/update against it) — the disappearance is Slack-side, driven by how long the stream stays open. **Stopgap applied 2026-09-14:** `nativeStreaming: false` in `src/mastra/chat/client.ts` (durable post-and-edit; a later `editMessage` message_not_found fails benignly because content is already posted). Cost: loses the native streaming widget and the stop/feedback buttons the adapter can only attach in native mode. **Proper fix (do this, then re-enable native streaming):** patch `@chat-adapter/slack` `index.js` ~4143 via Bun `patchedDependencies` (already used for `@mastra/core`, see `package.json`) so the `stop()` catch, on `message_not_found`, re-posts `renderer.getCommittableText()` as a fresh message instead of rethrowing; upstream the same fix. Also mitigated indirectly by faster model failover (glm default, 2026-09-14) so turns do not hold the stream open for minutes. `not_authorized` needs no separate fix; if it must be pinned, read the `apiCall('<method>') start` debug line now that Slack logs route through `slackWebLogger`.
