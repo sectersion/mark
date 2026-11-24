@@ -1,16 +1,24 @@
 import { RequestContext } from '@mastra/core/request-context';
-import type { Message, Thread } from 'chat';
+import type { Author, Message, Thread } from 'chat';
 import { receptionist } from '../agents/receptionist';
 import { writeAudit } from '../db/queries/audit';
 import { logger } from '../lib/logger';
 import { allowReceptionist } from '../lib/rate-limit';
+import { passToOwnerTurnKey } from '../tools/receptionist/pass-to-owner';
+
+type TurnMessage = Pick<Message, 'id' | 'text'> & {
+  author: Pick<Author, 'userId' | 'userName' | 'fullName' | 'isMe'>;
+};
 
 export async function receptionistTurn({
   thread,
   message,
 }: {
-  thread: Thread;
-  message: Message;
+  thread: Pick<Thread, 'id' | 'channelId' | 'isDM'> & {
+    messages: AsyncIterable<TurnMessage>;
+    post: (text: string) => Promise<unknown>;
+  };
+  message: TurnMessage;
 }): Promise<{ text: string; toolNames: string[] }> {
   const { userId } = message.author;
   if (!allowReceptionist({ userId, now: Date.now() })) {
@@ -42,6 +50,7 @@ export async function receptionistTurn({
     channelId: thread.channelId,
     isDM: thread.isDM,
   });
+  requestContext.set(passToOwnerTurnKey, { passed: false });
 
   let text = 'sorry, something went wrong on my end. try again in a bit';
   let toolNames: string[] = [];
