@@ -8,6 +8,7 @@ import { MastraStorageExporter, Observability } from '@mastra/observability';
 import { env } from '@/env';
 import { exploreAgent as explore } from './agents/explore';
 import orchestrator from './agents/orchestrator';
+import { receptionist } from './agents/receptionist';
 import { researchAgent as research } from './agents/research';
 import { summarizer } from './agents/summarizer';
 import { sweepApprovals } from './chat/approvals';
@@ -30,7 +31,7 @@ process.on('uncaughtException', (err: Error) => {
 const isProduction = env.NODE_ENV === 'production';
 
 export const mastra = new Mastra({
-  agents: { orchestrator, summarizer, research, explore },
+  agents: { orchestrator, summarizer, research, explore, receptionist },
   schedules: {
     prepare: async ({ mastra: runtime, schedule }) => {
       const current = await runtime.schedules.get(schedule.id);

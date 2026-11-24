@@ -54,3 +54,9 @@ export const workingModel = {
 export const emoji = { listTtl: 5 * 60 * 1000 };
 
 export const approval = { ttl: 24 * 60 * 60 * 1000 };
+
+export const receptionist = {
+  id: 'receptionist',
+  maxMessages: 10,
+  windowMs: 10 * 60 * 1000,
+};
