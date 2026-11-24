@@ -16,7 +16,6 @@ import { registerEvents } from './chat/events';
 import { setChat } from './chat/instance';
 import { setMastra } from './chat/mastra-instance';
 import { postgresStore, runMigrations } from './db';
-import { buildAllowlist } from './lib/allowed-users';
 import { logger } from './lib/logger';
 import { LangfuseFeedbackExporter } from './observability/langfuse-feedback';
 import { slackIdentity } from './observability/slack-identity';
@@ -88,7 +87,7 @@ setMastra(mastra);
 orchestrator
   .getChannels()
   ?.initialize(mastra)
-  .then(async () => {
+  .then(() => {
     const sdk = orchestrator.getChannels()?.sdk;
     if (!sdk) {
       return;
@@ -97,7 +96,6 @@ orchestrator
     registerEvents();
     // ponytail: setInterval, single process
     setInterval(sweepApprovals, 5 * 60 * 1000);
-    await buildAllowlist();
     logger.info('[agent] online');
   })
   .catch((err: unknown) =>

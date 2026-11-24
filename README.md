@@ -36,12 +36,15 @@ design is written down and not yet built. Read it in
 
 ## What works today
 
-This is inherited from gorkie and works as it did there.
+Apart from routing by sender, this is inherited from gorkie and works as it
+did there.
 
 - Slack-native replies for mentions, DMs, and subscribed thread follow-ups,
   streamed as they generate, with a typing indicator.
-- Optional opt-in allowlist (`OPT_IN_CHANNEL`): gate access to members of one
-  channel, with an in-Slack opt-in card for everyone else.
+- Routing by sender: only `OWNER_SLACK_USER_ID` reaches mark, and only in a DM
+  or a thread nobody else has posted in. Everyone else, and the owner in a
+  thread with other people in it, gets the receptionist. While mark is paused,
+  everyone but the owner is told it is offline.
 - Per-thread [E2B][e2b] sandbox sessions: isolated cloud VMs, never the host.
   Full filesystem access (`read_file`/`write_file`/`edit_file`/`list_files`/
   `delete_file`/`file_stat`) plus shell command execution
@@ -127,7 +130,7 @@ local database named `gorkie`. Mastra creates its tables on first run.
 | `SLACK_BOT_TOKEN` | yes | Bot User OAuth token (`xoxb-…`) |
 | `SLACK_APP_TOKEN` | yes | App-level token with `connections:write` (`xapp-…`) |
 | `SLACK_USER_TOKEN` | yes | Slack user token, not the bot token, used for public-channel search. Mint it with `search:read.public` only; the code verifies the granted scopes on first use and refuses the token if it also carries `search:read.im`, `search:read.mpim`, or `search:read.private`. See [docs/slack-search.md](docs/slack-search.md) |
-| `OPT_IN_CHANNEL` | no | Slack channel id gating access to members only (opt-in allowlist); unset means everyone is allowed |
+| `OWNER_SLACK_USER_ID` | yes | Slack user id (`U…`) of the one person mark serves. Everyone else reaches the receptionist |
 | `AI_GATEWAY_API_KEY` | yes | Vercel AI Gateway key, used for the `vmc/gorkie` model config |
 | `HACKCLUB_API_KEY` | yes | Hack Club AI proxy key, the fallback and the image model |
 | `DATABASE_URL` | yes | Postgres connection string |
@@ -142,8 +145,7 @@ local database named `gorkie`. Mastra creates its tables on first run.
 | `EXA_API_KEY` | yes | Exa key, powers `search_web`/`fetch_url` |
 | `AGENTMAIL_API_KEY` | no | Lets the sandbox reach the AgentMail API without the key entering the sandbox |
 
-See [`.env.example`](./.env.example) for the full annotated list. The design
-adds an `OWNER_SLACK_USER_ID` variable; it does not exist yet.
+See [`.env.example`](./.env.example) for the full annotated list.
 
 ## Project structure
 

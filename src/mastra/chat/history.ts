@@ -11,14 +11,15 @@ export async function withHistory({
   thread,
 }: {
   message: Message;
-  thread: Thread;
-}): Promise<Message> {
+  thread: Pick<Thread, 'isDM' | 'state' | 'messages' | 'mentionUser'>;
+}): Promise<{ message: Message; authorIds: (string | undefined)[] }> {
   if (thread.isDM) {
-    return message;
+    return { message, authorIds: [] };
   }
 
   const state = await threadState(thread);
   const lines: string[] = [];
+  const authorIds: (string | undefined)[] = [];
   let scanned = 0;
   let comments = 0;
   let truncated = false;
@@ -28,44 +29,50 @@ export async function withHistory({
     }
     if (scanned >= MAX_SCANNED) {
       truncated = true;
+      // Whoever wrote the messages past the window is unknown, so fail closed.
+      authorIds.push(undefined);
       break;
     }
     scanned++;
+    if (!previous.author.isMe) {
+      authorIds.push(previous.author.userId);
+    }
     if (isComment(previous)) {
       comments++;
       continue;
     }
-    if (previous.id !== message.id && !previous.author.isMe) {
-      const mention = thread.mentionUser(previous.author.userId);
-      const author = previous.author.fullName || previous.author.userName;
-      const bot = previous.author.isBot === true ? ' (bot)' : '';
-      const text = previous.formatted
-        ? stringifyMarkdown(previous.formatted).trim()
-        : previous.text;
-      const files =
-        previous.attachments.length > 0
-          ? ` [${previous.attachments.length} attachment${previous.attachments.length === 1 ? '' : 's'}: ${previous.attachments
-              .map((file) => {
-                const url = file.url ?? file.fetchMetadata?.url;
-                const id = url?.match(/\bF[A-Z0-9]{6,}\b/)?.[0];
-                return [file.name ?? file.type, id ?? url]
-                  .filter(Boolean)
-                  .join(' ');
-              })
-              .join(', ')}]`
-          : '';
-      lines.push(
-        `[${author} (${mention})${bot}] (msg:${previous.id}): ${text}${files}`
-      );
+    if (previous.id === message.id || previous.author.isMe) {
+      continue;
     }
     if (lines.length >= MAX_MESSAGES) {
       truncated = true;
-      break;
+      continue;
     }
+    const mention = thread.mentionUser(previous.author.userId);
+    const author = previous.author.fullName || previous.author.userName;
+    const bot = previous.author.isBot === true ? ' (bot)' : '';
+    const text = previous.formatted
+      ? stringifyMarkdown(previous.formatted).trim()
+      : previous.text;
+    const files =
+      previous.attachments.length > 0
+        ? ` [${previous.attachments.length} attachment${previous.attachments.length === 1 ? '' : 's'}: ${previous.attachments
+            .map((file) => {
+              const url = file.url ?? file.fetchMetadata?.url;
+              const id = url?.match(/\bF[A-Z0-9]{6,}\b/)?.[0];
+              return [file.name ?? file.type, id ?? url]
+                .filter(Boolean)
+                .join(' ');
+            })
+            .join(', ')}]`
+        : '';
+    lines.push(
+      `[${author} (${mention})${bot}] (msg:${previous.id}): ${text}${files}`
+    );
   }
 
   if (lines.length === 0 && comments === 0) {
-    return message;
+    return { message, authorIds };
   }
 
   const text = [
@@ -90,5 +97,5 @@ export async function withHistory({
   ].join('\n');
   message.text = text;
   message.formatted = parseMarkdown(text);
-  return message;
+  return { message, authorIds };
 }
