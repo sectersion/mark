@@ -2,7 +2,7 @@ import type { Message, Thread } from 'chat';
 import { agent as agentConfig } from '../../config';
 import { logger } from '../../lib/logger';
 import { isOwner } from '../../lib/owner';
-import { latestPausedScheduleIds, setPaused } from '../../lib/pause';
+import { pauseAll, resumeAll } from '../../lib/pause';
 import type { CommandHandler } from '../../types';
 import { getMastra } from '../mastra-instance';
 
@@ -26,24 +26,25 @@ async function reply({
     });
 }
 
+function failures(failed: string[]): string {
+  return failed.length > 0 ? ` Failed: ${failed.join(', ')}.` : '';
+}
+
 export const pause: CommandHandler = async ({ message, thread }) => {
   const byId = message.author.userId;
   if (!isOwner(byId)) {
     return;
   }
-  const { schedules } = getMastra();
-  const active = await schedules.list({
+  const outcome = await pauseAll({
     agentId: agentConfig.id,
-    status: 'active',
+    byId,
+    schedules: getMastra().schedules,
   });
-  const scheduleIds = active.map((schedule) => schedule.id);
-  await setPaused({ paused: true, byId, scheduleIds });
-  await Promise.all(scheduleIds.map((id) => schedules.pause(id)));
-  await reply({
-    message,
-    text: `Paused. Writes are blocked and ${scheduleIds.length} schedule(s) stopped. Use !resume to undo.`,
-    thread,
-  });
+  const text =
+    outcome.state === 'unchanged'
+      ? 'Already paused. Use !resume to undo.'
+      : `Paused. Writes are blocked and ${outcome.count} schedule(s) stopped.${failures(outcome.failed)} Use !resume to undo.`;
+  await reply({ message, text, thread });
 };
 
 export const resume: CommandHandler = async ({ message, thread }) => {
@@ -51,13 +52,13 @@ export const resume: CommandHandler = async ({ message, thread }) => {
   if (!isOwner(byId)) {
     return;
   }
-  const scheduleIds = await latestPausedScheduleIds();
-  await setPaused({ paused: false, byId });
-  const { schedules } = getMastra();
-  await Promise.all(scheduleIds.map((id) => schedules.resume(id)));
-  await reply({
-    message,
-    text: `Resumed. ${scheduleIds.length} schedule(s) restarted.`,
-    thread,
+  const outcome = await resumeAll({
+    byId,
+    schedules: getMastra().schedules,
   });
+  const text =
+    outcome.state === 'unchanged'
+      ? 'Not paused, nothing to resume.'
+      : `Resumed. ${outcome.count} schedule(s) restarted.${failures(outcome.failed)}`;
+  await reply({ message, text, thread });
 };
