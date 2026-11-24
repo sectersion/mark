@@ -2,10 +2,9 @@ import type { Message } from 'chat';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
 import { chat } from '../../chat/instance';
-import type { Target } from '../../chat/target';
 import { chatChannelId, parseSlackId, rawId, threadIdOf } from '../../lib/ids';
 import { logger } from '../../lib/logger';
-import type { ChannelContext } from '../../types';
+import type { ChannelContext, Target } from '../../types';
 
 const slackErrorSchema = z.looseObject({
   data: z.looseObject({ error: z.string().optional() }).optional(),

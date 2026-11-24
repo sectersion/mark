@@ -1,10 +1,10 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
-import { type Target, targetSchema } from '../../chat/target';
 import { upload } from '../../config';
 import { channelContext } from '../../lib/context';
 import { parseSlackId, rawId } from '../../lib/ids';
+import { type Target, targetSchema } from '../../types';
 import { input, output } from '../../types/tools/index';
 import { requireSandbox } from '../../workspace';
 import { assertCanPostTo, joinChannel } from './utils';

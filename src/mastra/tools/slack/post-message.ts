@@ -3,9 +3,10 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
 import { chat } from '../../chat/instance';
-import { resolveTarget, targetSchema } from '../../chat/target';
+import { resolveTarget } from '../../chat/target';
 import { channelContext } from '../../lib/context';
 import { parseSlackId, rawId, threadIdOf } from '../../lib/ids';
+import { targetSchema } from '../../types';
 import { input, output } from '../../types/tools/index';
 import { assertCanPostTo, joinChannel } from './utils';
 
