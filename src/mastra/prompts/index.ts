@@ -4,6 +4,7 @@ import { commandsPrompt } from './commands';
 import { contextPrompt } from './context';
 import { corePrompt } from './core';
 import { guardrailsPrompt } from './guardrails';
+import { memoryPrompt } from './memory';
 import { personalityPrompt } from './personality';
 import { reasoningPrompt } from './reasoning';
 import { slackPrompt } from './slack';
@@ -23,6 +24,7 @@ export function instructions(
         slackPrompt,
         commandsPrompt,
         toolsPrompt,
+        memoryPrompt,
         guardrailsPrompt,
       ].join('\n\n'),
     },

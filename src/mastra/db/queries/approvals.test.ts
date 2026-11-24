@@ -194,6 +194,16 @@ test.skipIf(noDb)('listApprovedRules lists only approved rules', async () => {
   const approved = await rule(`approved ${tag}`);
   const declined = await rule(`declined ${tag}`);
   await rule(`pending ${tag}`);
+  const expired = await createApproval({
+    kind: 'standing_rule',
+    payload: { rule: `expired ${tag}` },
+    ttlMs: -1000,
+  });
+  await resolveApproval({
+    id: expired.id,
+    decision: 'approved',
+    deciderId: 'UOWNER',
+  });
   await resolveApproval({
     id: approved.id,
     decision: 'approved',
