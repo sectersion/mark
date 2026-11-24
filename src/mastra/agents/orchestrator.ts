@@ -226,7 +226,13 @@ const orchestrator = new Agent({
       },
     },
     threadContext: { maxMessages: 0 },
-    handlers: { onMention, onSubscribedMessage, onDirectMessage },
+    handlers: {
+      onMention,
+      onSubscribedMessage,
+      onDirectMessage,
+      // The default slash-command handler runs mark for any user, bypassing the router.
+      onSlashCommand: false,
+    },
   },
 });
 

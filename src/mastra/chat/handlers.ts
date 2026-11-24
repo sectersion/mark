@@ -3,6 +3,7 @@ import { logger } from '../lib/logger';
 import { isOwner } from '../lib/owner';
 import { isPaused } from '../lib/pause';
 import { routeMessage } from '../lib/route';
+import type { CommandThread } from '../types';
 import { attachments } from './attachments';
 import { slack } from './client';
 import { handleCommand } from './commands';
@@ -11,7 +12,13 @@ import { isComment } from './message';
 import { receptionistTurn } from './receptionist';
 import { taintThread, threadState } from './state';
 
-type DefaultHandler = (thread: Thread, message: Message) => Promise<void>;
+type RoutedThread = CommandThread &
+  Pick<Thread, 'channelId' | 'state' | 'setState' | 'mentionUser'> & {
+    messages: AsyncIterable<Message>;
+    post: (text: string) => Promise<unknown>;
+  };
+
+type DefaultHandler<T> = (thread: T, message: Message) => Promise<void>;
 
 function isFromBot(message: Message): boolean {
   return (
@@ -21,15 +28,15 @@ function isFromBot(message: Message): boolean {
   );
 }
 
-async function respond({
+async function respond<T extends RoutedThread>({
   defaultHandler,
   message,
   thread,
   follow = false,
 }: {
-  defaultHandler: DefaultHandler;
+  defaultHandler: DefaultHandler<T>;
   message: Message;
-  thread: Thread;
+  thread: T;
   follow?: boolean;
 }): Promise<void> {
   const { text } = message;
@@ -88,10 +95,10 @@ async function respond({
   }
 }
 
-export async function onMention(
-  thread: Thread,
+export async function onMention<T extends RoutedThread>(
+  thread: T,
   message: Message,
-  defaultHandler: DefaultHandler
+  defaultHandler: DefaultHandler<T>
 ): Promise<void> {
   await taintThread({ thread, authorIds: [message.author.userId] });
   if (isFromBot(message)) {
@@ -105,10 +112,10 @@ export async function onMention(
   });
 }
 
-export async function onSubscribedMessage(
-  thread: Thread,
+export async function onSubscribedMessage<T extends RoutedThread>(
+  thread: T,
   message: Message,
-  defaultHandler: DefaultHandler
+  defaultHandler: DefaultHandler<T>
 ): Promise<void> {
   await taintThread({ thread, authorIds: [message.author.userId] });
   if (isFromBot(message) || isComment(message)) {
@@ -122,10 +129,10 @@ export async function onSubscribedMessage(
   await respond({ defaultHandler, message, thread });
 }
 
-export async function onDirectMessage(
-  thread: Thread,
+export async function onDirectMessage<T extends RoutedThread>(
+  thread: T,
   message: Message,
-  defaultHandler: DefaultHandler
+  defaultHandler: DefaultHandler<T>
 ): Promise<void> {
   if (isFromBot(message)) {
     return;

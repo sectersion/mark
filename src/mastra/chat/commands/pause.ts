@@ -1,9 +1,9 @@
-import type { Message, Thread } from 'chat';
+import type { Message } from 'chat';
 import { agent as agentConfig } from '../../config';
 import { logger } from '../../lib/logger';
 import { isOwner } from '../../lib/owner';
 import { pauseAll, resumeAll } from '../../lib/pause';
-import type { CommandHandler } from '../../types';
+import type { CommandHandler, CommandThread } from '../../types';
 import { getMastra } from '../mastra-instance';
 
 async function reply({
@@ -13,7 +13,7 @@ async function reply({
 }: {
   message: Message;
   text: string;
-  thread: Thread;
+  thread: CommandThread;
 }): Promise<void> {
   await thread
     .postEphemeral(message.author, text, { fallbackToDM: false })
