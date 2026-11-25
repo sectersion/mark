@@ -96,6 +96,31 @@ row exists for today, anyone who is not the owner gets "mark is offline."
 - Caps count requests, not dollars. The dollar limits below are the real spend
   control.
 
+## Standing rules: list and revoke
+
+There is no revoke tool yet (Phase 4). Every approved rule shows in mark's
+prompt with the first 8 characters of its approval id, for example
+`- [0b6f1c8e] always reply in lowercase`, so mark can tell you which one to
+revoke. Run these with `psql "$DATABASE_URL"`.
+
+List approved rules:
+
+```sql
+select id, payload->>'rule' as rule, decided_at
+from approvals
+where kind = 'standing_rule' and status = 'approved'
+order by decided_at;
+```
+
+Revoke one (paste the full id, or match the short one with `id::text like '0b6f1c8e%'`):
+
+```sql
+update approvals set status = 'declined'
+where id = '<full id>' and kind = 'standing_rule';
+```
+
+The rule drops out of the prompt on mark's next turn; no restart needed.
+
 ## Spend: who pays, and dollar limits
 
 - [ ] Owner decision: who pays for the keys (AI Gateway, Hack Club proxy, E2B, Exa)?

@@ -24,6 +24,23 @@ export const content = {
         'Ask me for my timezone, then schedule a weekday 9 AM reminder to review my priorities.',
     },
   ],
+  frontDesk: {
+    type: 'home',
+    blocks: cardToSlackBlocks(
+      Card({
+        title: "mark's front desk",
+        children: [
+          Section([
+            {
+              type: 'text',
+              content:
+                "This is mark's front desk. Send me a DM to leave a message, and I'll pass it on.",
+            },
+          ]),
+        ],
+      })
+    ),
+  },
   home: {
     type: 'home',
     blocks: cardToSlackBlocks(

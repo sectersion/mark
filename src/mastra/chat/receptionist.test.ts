@@ -144,3 +144,20 @@ test('a rate-limited user gets one fixed line and no model call', async () => {
   expect(posted).toEqual(["slow down a sec, i'll pass that on when i can"]);
   expect(result.toolNames).toEqual([]);
 });
+
+test('a rate-limited user is told to slow down only once per window', async () => {
+  for (let i = 0; i < 10; i++) {
+    allowReceptionist({ userId: 'UOTHER-flood', now: Date.now() });
+  }
+  const first = fakeTurn('UOTHER-flood');
+  await receptionistTurn({ thread: first.thread, message: first.message });
+  const second = fakeTurn('UOTHER-flood');
+  const result = await receptionistTurn({
+    thread: second.thread,
+    message: second.message,
+  });
+  expect(first.posted).toHaveLength(1);
+  expect(second.posted).toEqual([]);
+  expect(result).toEqual({ text: '', toolNames: [] });
+  expect(calls).toHaveLength(0);
+});

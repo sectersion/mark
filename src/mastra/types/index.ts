@@ -1,3 +1,4 @@
+export * from './app-home';
 export * from './approval';
 export * from './caps';
 export * from './channel';

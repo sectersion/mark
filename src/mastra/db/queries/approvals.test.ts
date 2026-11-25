@@ -214,8 +214,8 @@ test.skipIf(noDb)('listApprovedRules lists only approved rules', async () => {
     decision: 'declined',
     deciderId: 'UOWNER',
   });
-  const rules = (await listApprovedRules()).filter((r) => r.includes(tag));
-  expect(rules).toEqual([`approved ${tag}`]);
+  const rules = (await listApprovedRules()).filter((r) => r.rule.includes(tag));
+  expect(rules).toEqual([{ id: approved.id, rule: `approved ${tag}` }]);
 });
 
 test.skipIf(noDb)(

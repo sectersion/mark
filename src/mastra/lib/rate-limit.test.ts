@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test';
 import { receptionist } from '../config';
-import { allowReceptionist, trackedReceptionistUsers } from './rate-limit';
+import {
+  allowReceptionist,
+  firstNotice,
+  trackedReceptionistUsers,
+} from './rate-limit';
 
 const { maxMessages, windowMs } = receptionist;
 
@@ -42,4 +46,13 @@ test('forgets users whose window has passed', () => {
   }
   allowReceptionist({ userId: 'UOTHER-fresh', now: now + windowMs });
   expect(trackedReceptionistUsers()).toBe(1);
+});
+
+test('a fixed notice goes out once per user per window', () => {
+  const now = 4_000_000;
+  expect(firstNotice({ key: 'slow:UOTHER-e', now })).toBe(true);
+  expect(firstNotice({ key: 'slow:UOTHER-e', now: now + 1 })).toBe(false);
+  expect(firstNotice({ key: 'offline:UOTHER-e', now: now + 1 })).toBe(true);
+  expect(firstNotice({ key: 'slow:UOTHER-f', now: now + 1 })).toBe(true);
+  expect(firstNotice({ key: 'slow:UOTHER-e', now: now + windowMs })).toBe(true);
 });

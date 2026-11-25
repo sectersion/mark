@@ -5,7 +5,7 @@ test.each([
   [{ authorId: 'UOWNER', tainted: false, paused: false }, 'mark'],
   [{ authorId: 'UOWNER', tainted: false, paused: true }, 'mark'],
   [{ authorId: 'UOWNER', tainted: true, paused: false }, 'receptionist'],
-  [{ authorId: 'UOWNER', tainted: true, paused: true }, 'receptionist'],
+  [{ authorId: 'UOWNER', tainted: true, paused: true }, 'offline'],
   [{ authorId: 'UOTHER', tainted: false, paused: false }, 'receptionist'],
   [{ authorId: 'UOTHER', tainted: true, paused: false }, 'receptionist'],
   [{ authorId: 'UOTHER', tainted: false, paused: true }, 'offline'],

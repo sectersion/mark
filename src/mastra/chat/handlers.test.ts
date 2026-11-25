@@ -78,18 +78,23 @@ function message({
   userId,
   text = 'hi',
   isBot = false,
+  isMention,
+  raw = {},
 }: {
   id: string;
   userId: string;
   text?: string;
   isBot?: boolean;
+  isMention?: boolean;
+  raw?: Record<string, unknown>;
 }): Message {
   return new Message({
     id,
     threadId: 'slack:C1:1.0',
     text,
     formatted: parseMarkdown(text),
-    raw: { text },
+    isMention,
+    raw: { text, ...raw },
     author: { userId, userName: userId, fullName: userId, isBot, isMe: false },
     metadata: { dateSent: new Date(0), edited: false },
     attachments: [],
@@ -252,7 +257,7 @@ test('an owner turn routed to mark is audited, without text', async () => {
 
 test('an exceeded cap takes strangers offline and audits no turn', async () => {
   capsExceeded = true;
-  const current = message({ id: 'm10', userId: 'UOTHER' });
+  const current = message({ id: 'm10', userId: 'UOTHER-cap' });
   const { thread, defaultHandler, posted } = fakeThread({
     newestFirst: [current],
   });
@@ -288,4 +293,76 @@ test('only the owner can press a built-in tool approval button', async () => {
   expect(pressed).toBe(0);
   await onAction(user('UOWNER'), press);
   expect(pressed).toBe(1);
+});
+
+test('a stranger is told mark is offline once per window, not per message', async () => {
+  paused = true;
+  const first = fakeThread({ isDM: true });
+  await onDirectMessage(
+    first.thread,
+    message({ id: 'm1', userId: 'UOTHER-repeat' }),
+    first.defaultHandler
+  );
+  const second = fakeThread({ isDM: true });
+  await onDirectMessage(
+    second.thread,
+    message({ id: 'm2', userId: 'UOTHER-repeat' }),
+    second.defaultHandler
+  );
+  expect(first.posted).toEqual(['mark is offline.']);
+  expect(second.posted).toEqual([]);
+});
+
+test('a followed thread ignores a stranger who does not address mark', async () => {
+  const current = message({ id: 'm2', userId: 'UOTHER', text: 'lol' });
+  const { thread, defaultHandler, posted } = fakeThread({
+    newestFirst: [current],
+  });
+  await thread.setState({ respondOnThreadMessages: true });
+  await onSubscribedMessage(thread, current, defaultHandler);
+  expect(posted).toEqual([]);
+  expect(receptionistCalls).toEqual([]);
+});
+
+test('a followed thread passes a stranger who mentions mark to the receptionist', async () => {
+  const current = message({
+    id: 'm2',
+    userId: 'UOTHER',
+    text: 'hey mark',
+    isMention: true,
+  });
+  const { thread, defaultHandler } = fakeThread({ newestFirst: [current] });
+  await thread.setState({ respondOnThreadMessages: true });
+  await onSubscribedMessage(thread, current, defaultHandler);
+  expect(receptionistCalls).toEqual([{ text: 'hey mark', userId: 'UOTHER' }]);
+});
+
+test('an app posting with the owner id is not the owner', async () => {
+  const appPost = message({
+    id: 'm1',
+    userId: 'UOWNER',
+    raw: { app_id: 'A0APP' },
+  });
+  const dm = fakeThread({ isDM: true });
+  await onDirectMessage(dm.thread, appPost, dm.defaultHandler);
+  expect(dm.turns).toEqual([]);
+  expect(commandCalls).toBe(0);
+
+  const channel = fakeThread({ newestFirst: [appPost] });
+  await onMention(channel.thread, appPost, channel.defaultHandler);
+  expect(channel.stored()).toEqual({ tainted: true });
+  expect(channel.turns).toEqual([]);
+});
+
+test('an app post with the owner id in the history taints the thread', async () => {
+  const current = message({ id: 'm2', userId: 'UOWNER' });
+  const { thread, defaultHandler, turns } = fakeThread({
+    newestFirst: [
+      current,
+      message({ id: 'm1', userId: 'UOWNER', raw: { bot_profile: {} } }),
+    ],
+  });
+  await onMention(thread, current, defaultHandler);
+  expect(turns).toEqual([]);
+  expect(receptionistCalls).toEqual([{ text: 'hi', userId: 'UOWNER' }]);
 });

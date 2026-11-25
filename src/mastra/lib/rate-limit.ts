@@ -28,3 +28,26 @@ export function allowReceptionist({
 export function trackedReceptionistUsers(): number {
   return sent.size;
 }
+
+// ponytail: in-memory, single process; move to Postgres if mark runs on more than one host
+const noticed = new Map<string, number>();
+
+export function firstNotice({
+  key,
+  now,
+}: {
+  key: string;
+  now: number;
+}): boolean {
+  const since = now - receptionist.windowMs;
+  for (const [seen, at] of noticed) {
+    if (at <= since) {
+      noticed.delete(seen);
+    }
+  }
+  if (noticed.has(key)) {
+    return false;
+  }
+  noticed.set(key, now);
+  return true;
+}

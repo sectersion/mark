@@ -40,6 +40,9 @@ const cronDescription =
 export const createScheduledTaskTool = createTool({
   id: 'create_scheduled_task',
   description: createDescription,
+  // A schedule keeps running prompts long after this turn, so a fetched page
+  // or other tool output must not be able to plant one: the owner confirms it.
+  requireApproval: true,
   inputSchema: input({
     task: z.string().min(1).describe('Prompt to run on the schedule.'),
     cron: z.string().min(1).describe(cronDescription),

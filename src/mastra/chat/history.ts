@@ -1,6 +1,6 @@
 import type { Message, Thread } from 'chat';
 import { parseMarkdown, stringifyMarkdown } from 'chat';
-import { isComment } from './message';
+import { authorId, isComment } from './message';
 import { threadState } from './state';
 
 const MAX_MESSAGES = 10;
@@ -35,7 +35,7 @@ export async function withHistory({
     }
     scanned++;
     if (!previous.author.isMe) {
-      authorIds.push(previous.author.userId);
+      authorIds.push(authorId(previous));
     }
     if (isComment(previous)) {
       comments++;

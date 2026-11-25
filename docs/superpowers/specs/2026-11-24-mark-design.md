@@ -216,6 +216,15 @@ Security rules:
 - **Storage.** Memory is not encrypted by the app. Production Postgres should
   use disk encryption and a strong credential (designer's call, operational).
 
+**Known gap (Phase 1).** The taint rule is per thread, decided before the turn
+starts. Content mark reads during an untainted turn (fetched pages, history
+reads, MCP results, approval cards in the owner DM) can still steer that turn's
+working memory writes, because nothing re-checks taint inside the turn. Phase 1
+narrows it: standing rules always need the DM approval card, and
+`create_scheduled_task` needs the owner's approval press. Phase 3 adds an
+in-turn gate that makes memory read-only once a turn has loaded untrusted
+content.
+
 Left to the builder: verify what resource id Slack channels passes to the
 agent (dependencies were not installed during design, so Mastra's bundled
 docs were not read), and confirm `readOnly` works per call under channels.

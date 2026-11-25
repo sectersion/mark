@@ -27,6 +27,11 @@ export const approvalPayloadSchemas = {
 
 export type ApprovalKind = keyof typeof approvalPayloadSchemas;
 
+export interface StandingRule {
+  id: string;
+  rule: string;
+}
+
 export const approvalStatusSchema = z.enum([
   'pending',
   'approved',

@@ -3,6 +3,7 @@ import { writeAudit } from '../db/queries/audit';
 import { logger } from '../lib/logger';
 import { isOwner, isOwnerActor } from '../lib/owner';
 import { isPaused } from '../lib/pause';
+import { firstNotice } from '../lib/rate-limit';
 import { routeMessage } from '../lib/route';
 import type { CommandThread } from '../types';
 import { attachments } from './attachments';
@@ -10,7 +11,7 @@ import { enforceDailyCaps } from './caps';
 import { slack } from './client';
 import { handleCommand } from './commands';
 import { withHistory } from './history';
-import { isComment } from './message';
+import { authorId, isAppPost, isComment } from './message';
 import { receptionistTurn } from './receptionist';
 import { taintThread, threadState } from './state';
 
@@ -26,7 +27,8 @@ function isFromBot(message: Message): boolean {
   return (
     message.author.isBot === true ||
     message.author.userId === 'USLACKBOT' ||
-    message.author.isMe === true
+    message.author.isMe === true ||
+    isAppPost(message)
   );
 }
 
@@ -44,18 +46,23 @@ async function respond<T extends RoutedThread>({
   const { text } = message;
   const history = await withHistory({ message: attachments(message), thread });
   const paused = (await isPaused()) || (await enforceDailyCaps());
+  const author = authorId(message);
   const route = routeMessage({
-    authorId: message.author.userId,
+    authorId: author,
     tainted: await taintThread({ thread, authorIds: history.authorIds }),
     paused,
   });
 
   if (route === 'offline') {
-    await thread.post('mark is offline.');
+    if (
+      firstNotice({ key: `offline:${message.author.userId}`, now: Date.now() })
+    ) {
+      await thread.post('mark is offline.');
+    }
     return;
   }
   if (route === 'receptionist') {
-    if (isOwner(message.author.userId)) {
+    if (isOwner(author)) {
       await thread.post(
         "that thread has other people in it, so i'm treating it as public. dm me to talk properly."
       );
@@ -107,7 +114,7 @@ export async function onMention<T extends RoutedThread>(
   message: Message,
   defaultHandler: DefaultHandler<T>
 ): Promise<void> {
-  await taintThread({ thread, authorIds: [message.author.userId] });
+  await taintThread({ thread, authorIds: [authorId(message)] });
   if (isFromBot(message)) {
     return;
   }
@@ -124,13 +131,16 @@ export async function onSubscribedMessage<T extends RoutedThread>(
   message: Message,
   defaultHandler: DefaultHandler<T>
 ): Promise<void> {
-  await taintThread({ thread, authorIds: [message.author.userId] });
+  await taintThread({ thread, authorIds: [authorId(message)] });
   if (isFromBot(message) || isComment(message)) {
     return;
   }
+  // A followed thread answers only the owner unprompted; anyone else has to
+  // address mark, or every stranger reply in the thread would get one.
   const state = await threadState(thread);
-  const isFollowingThread = state?.respondOnThreadMessages === true;
-  if (!(isFollowingThread || message.isMention)) {
+  const isFollowingThread =
+    state?.respondOnThreadMessages === true && isOwner(authorId(message));
+  if (!(isFollowingThread || message.isMention || thread.isDM)) {
     return;
   }
   await respond({ defaultHandler, message, thread });

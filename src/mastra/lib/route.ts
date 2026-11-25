@@ -12,5 +12,9 @@ export function routeMessage({
   if (!isOwner(authorId)) {
     return paused ? 'offline' : 'receptionist';
   }
-  return tainted ? 'receptionist' : 'mark';
+  if (!tainted) {
+    return 'mark';
+  }
+  // Pause turns the receptionist off for everyone, the owner included.
+  return paused ? 'offline' : 'receptionist';
 }

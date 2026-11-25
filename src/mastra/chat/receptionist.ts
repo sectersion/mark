@@ -3,7 +3,7 @@ import type { Author, Message, Thread } from 'chat';
 import { receptionist } from '../agents/receptionist';
 import { writeAudit } from '../db/queries/audit';
 import { logger } from '../lib/logger';
-import { allowReceptionist } from '../lib/rate-limit';
+import { allowReceptionist, firstNotice } from '../lib/rate-limit';
 import { passToOwnerTurnKey } from '../tools/receptionist/pass-to-owner';
 
 export const failureLine =
@@ -24,7 +24,11 @@ export async function receptionistTurn({
   message: TurnMessage;
 }): Promise<{ text: string; toolNames: string[] }> {
   const { userId } = message.author;
-  if (!allowReceptionist({ userId, now: Date.now() })) {
+  const now = Date.now();
+  if (!allowReceptionist({ userId, now })) {
+    if (!firstNotice({ key: `slow:${userId}`, now })) {
+      return { text: '', toolNames: [] };
+    }
     const text = "slow down a sec, i'll pass that on when i can";
     await thread.post(text);
     return { text, toolNames: [] };

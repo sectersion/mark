@@ -8,20 +8,19 @@ import {
   setGitHubSettings,
 } from '../../../db/queries/settings';
 import { logger } from '../../../lib/logger';
-import { githubPermissionSchema } from '../../../types';
+import { type AppHomeBot, githubPermissionSchema } from '../../../types';
 import { slack } from '../../client';
-import { chat } from '../../instance';
 import { polling } from './connect';
 import { ids } from './ids';
 import { configureView, selectedPermission, viewOf } from './views';
 
 export function registerSettings({
+  bot,
   publishHome,
 }: {
+  bot: AppHomeBot;
   publishHome: (userId: string) => Promise<void>;
 }): void {
-  const bot = chat();
-
   bot.onAction(ids.configure, async (event) => {
     const { userId } = event.user;
     const [settings, credential] = await Promise.all([

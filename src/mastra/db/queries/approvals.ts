@@ -7,6 +7,7 @@ import {
   approvalPayloadSchemas,
   approvalSchema,
   type ResolveApprovalResult,
+  type StandingRule,
 } from '../../types';
 import { db } from '../client';
 import { approvals } from '../schema';
@@ -152,15 +153,16 @@ export async function expireApprovals({
   return expired;
 }
 
-export async function listApprovedRules(): Promise<string[]> {
+export async function listApprovedRules(): Promise<StandingRule[]> {
   const rows = await db
-    .select({ payload: approvals.payload })
+    .select({ id: approvals.id, payload: approvals.payload })
     .from(approvals)
     .where(
       and(eq(approvals.kind, 'standing_rule'), eq(approvals.status, 'approved'))
     )
     .orderBy(asc(approvals.decidedAt));
-  return rows.map(
-    (row) => approvalPayloadSchemas.standing_rule.parse(row.payload).rule
-  );
+  return rows.map((row) => ({
+    id: row.id,
+    rule: approvalPayloadSchemas.standing_rule.parse(row.payload).rule,
+  }));
 }

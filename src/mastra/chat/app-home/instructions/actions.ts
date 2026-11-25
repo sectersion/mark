@@ -1,15 +1,15 @@
 import { Modal, TextInput } from 'chat';
 import { getInstructions, setInstructions } from '../../../db/queries/settings';
-import { chat } from '../../instance';
+import type { AppHomeBot } from '../../../types';
 import { ids } from './ids';
 
 export function registerCustomInstructions({
+  bot,
   publishHome,
 }: {
+  bot: AppHomeBot;
   publishHome: (userId: string) => Promise<void>;
 }): void {
-  const bot = chat();
-
   bot.onAction(ids.edit, async (event) => {
     const instructions = await getInstructions(event.user.userId);
     await event.openModal(

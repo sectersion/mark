@@ -10,8 +10,8 @@ import {
   verifyGitHubPat,
 } from '../../../lib/github';
 import { logger } from '../../../lib/logger';
+import type { AppHomeBot } from '../../../types';
 import { slack } from '../../client';
-import { chat } from '../../instance';
 import { ids } from './ids';
 import {
   type ConnectMethod,
@@ -240,12 +240,12 @@ async function finishDeviceLogin(userId: string) {
 }
 
 export function registerConnect({
+  bot,
   publishHome,
 }: {
+  bot: AppHomeBot;
   publishHome: PublishHome;
 }): void {
-  const bot = chat();
-
   bot.onAction(ids.connect, (event) =>
     openConnect({
       publishHome,
