@@ -1,10 +1,12 @@
 import type { Message, Thread } from 'chat';
+import { writeAudit } from '../db/queries/audit';
 import { logger } from '../lib/logger';
 import { isOwner } from '../lib/owner';
 import { isPaused } from '../lib/pause';
 import { routeMessage } from '../lib/route';
 import type { CommandThread } from '../types';
 import { attachments } from './attachments';
+import { enforceDailyCaps } from './caps';
 import { slack } from './client';
 import { handleCommand } from './commands';
 import { withHistory } from './history';
@@ -41,10 +43,11 @@ async function respond<T extends RoutedThread>({
 }): Promise<void> {
   const { text } = message;
   const history = await withHistory({ message: attachments(message), thread });
+  const paused = (await isPaused()) || (await enforceDailyCaps());
   const route = routeMessage({
     authorId: message.author.userId,
     tainted: await taintThread({ thread, authorIds: history.authorIds }),
-    paused: await isPaused(),
+    paused,
   });
 
   if (route === 'offline') {
@@ -70,6 +73,10 @@ async function respond<T extends RoutedThread>({
     }
     return;
   }
+
+  await writeAudit({ actor: 'owner', action: 'turn' }).catch((error: unknown) =>
+    logger.error('[chat] could not audit an owner turn', { error })
+  );
 
   if (follow) {
     await thread.setState({ respondOnThreadMessages: true });

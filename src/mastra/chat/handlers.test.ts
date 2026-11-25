@@ -4,11 +4,15 @@ import { Message, parseMarkdown } from 'chat';
 const realReceptionist = { ...(await import('./receptionist')) };
 const realPause = { ...(await import('../lib/pause')) };
 const realCommands = { ...(await import('./commands')) };
+const realCaps = { ...(await import('./caps')) };
+const realAudit = { ...(await import('../db/queries/audit')) };
 
 let paused = false;
 let receptionistFails = false;
 const receptionistCalls: { text: string; userId: string }[] = [];
 let commandCalls = 0;
+let capsExceeded = false;
+const audits: { actor: string; action: string }[] = [];
 
 mock.module('./receptionist', () => ({
   ...realReceptionist,
@@ -30,6 +34,17 @@ mock.module('../lib/pause', () => ({
   ...realPause,
   isPaused: () => Promise.resolve(paused),
 }));
+mock.module('./caps', () => ({
+  ...realCaps,
+  enforceDailyCaps: () => Promise.resolve(capsExceeded),
+}));
+mock.module('../db/queries/audit', () => ({
+  ...realAudit,
+  writeAudit: (row: { actor: string; action: string }) => {
+    audits.push(row);
+    return Promise.resolve();
+  },
+}));
 mock.module('./commands', () => ({
   ...realCommands,
   handleCommand: () => {
@@ -46,6 +61,8 @@ afterAll(() => {
   mock.module('./receptionist', () => realReceptionist);
   mock.module('../lib/pause', () => realPause);
   mock.module('./commands', () => realCommands);
+  mock.module('./caps', () => realCaps);
+  mock.module('../db/queries/audit', () => realAudit);
 });
 
 beforeEach(() => {
@@ -53,6 +70,8 @@ beforeEach(() => {
   receptionistFails = false;
   receptionistCalls.length = 0;
   commandCalls = 0;
+  capsExceeded = false;
+  audits.length = 0;
 });
 
 function message({
@@ -223,4 +242,23 @@ test('a receptionist failure is caught and leaks nothing', async () => {
   );
   expect(receptionistCalls).toHaveLength(1);
   expect(posted.join('\n')).not.toContain('secret');
+});
+
+test('an owner turn routed to mark is audited, without text', async () => {
+  const current = message({ id: 'm9', userId: 'UOWNER', text: 'secret' });
+  const { thread, defaultHandler } = fakeThread({ newestFirst: [current] });
+  await onMention(thread, current, defaultHandler);
+  expect(audits).toEqual([{ actor: 'owner', action: 'turn' }]);
+});
+
+test('an exceeded cap takes strangers offline and audits no turn', async () => {
+  capsExceeded = true;
+  const current = message({ id: 'm10', userId: 'UOTHER' });
+  const { thread, defaultHandler, posted } = fakeThread({
+    newestFirst: [current],
+  });
+  await onMention(thread, current, defaultHandler);
+  expect(posted).toEqual(['mark is offline.']);
+  expect(receptionistCalls).toEqual([]);
+  expect(audits).toEqual([]);
 });

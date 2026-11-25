@@ -63,3 +63,14 @@ export const receptionist = {
   maxMessages: 10,
   windowMs: 10 * 60 * 1000,
 };
+
+// ponytail: count caps, not dollars; set dollar limits on the AI Gateway, E2B, and Exa dashboards by hand
+export const dailyCaps = {
+  ownerTurns: 500,
+  receptionistReplies: 200,
+  timeZone: 'America/Chicago',
+};
+
+// Mastra binds every interface when no host is set (@mastra/deployer
+// server/index.js `hostname: bindHost`), and its agent routes have no auth.
+export const server = { host: '127.0.0.1' };

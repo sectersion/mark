@@ -22,6 +22,7 @@
     "prepare": "lefthook install",
     "start": "mastra start",
     "test": "bun test",
+    "test:evals": "bun test --config=test/evals.bunfig.toml test/injection.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

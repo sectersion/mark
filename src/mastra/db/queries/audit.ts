@@ -1,4 +1,4 @@
-import { desc, gte, inArray } from 'drizzle-orm';
+import { and, count, desc, gte, inArray } from 'drizzle-orm';
 import { type AuditActor, type AuditRow, auditRowSchema } from '../../types';
 import { db } from '../client';
 import { auditLog } from '../schema';
@@ -40,4 +40,19 @@ export async function latestAuditAction({
     .orderBy(desc(auditLog.id))
     .limit(1);
   return row?.action;
+}
+
+export async function countAuditByAction({
+  actions,
+  since,
+}: {
+  actions: string[];
+  since: Date;
+}): Promise<Map<string, number>> {
+  const rows = await db
+    .select({ action: auditLog.action, total: count() })
+    .from(auditLog)
+    .where(and(inArray(auditLog.action, actions), gte(auditLog.at, since)))
+    .groupBy(auditLog.action);
+  return new Map(rows.map((row) => [row.action, row.total]));
 }

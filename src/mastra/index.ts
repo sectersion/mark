@@ -15,6 +15,7 @@ import { sweepApprovals } from './chat/approvals';
 import { registerEvents } from './chat/events';
 import { setChat } from './chat/instance';
 import { setMastra } from './chat/mastra-instance';
+import { server } from './config';
 import { postgresStore, runMigrations } from './db';
 import { logger } from './lib/logger';
 import { LangfuseFeedbackExporter } from './observability/langfuse-feedback';
@@ -31,6 +32,7 @@ const isProduction = env.NODE_ENV === 'production';
 
 export const mastra = new Mastra({
   agents: { orchestrator, summarizer, research, explore, receptionist },
+  server,
   schedules: {
     prepare: async ({ mastra: runtime, schedule }) => {
       const current = await runtime.schedules.get(schedule.id);
