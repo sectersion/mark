@@ -7,7 +7,10 @@ export const approvalPayloadSchemas = {
     wantsReply: z.boolean(),
   }),
   standing_rule: z.object({ rule: z.string().min(1).max(300) }),
-  outbound_message: z.object({ target: targetSchema, text: z.string().min(1) }),
+  outbound_message: z.object({
+    target: targetSchema,
+    text: z.string().min(1).max(2800),
+  }),
 };
 
 export type ApprovalKind = keyof typeof approvalPayloadSchemas;

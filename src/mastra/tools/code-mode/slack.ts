@@ -1,5 +1,5 @@
 import type { ToolsInput } from '@mastra/core/agent';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { createCodeMode, createCodeModeTool } from '@mastra/core/tools';
 import { E2BCodeModeTransport } from '@mastra/e2b';
 import { sandbox as sandboxConfig } from '../../config';
@@ -9,26 +9,26 @@ import { codeModeToolNames, getSandbox } from '../../workspace';
 import { workspaceTools } from '../../workspace/tools';
 import { canvasTools } from '../canvas';
 import { slackTools } from '../slack';
+import { slackReadOnlyKey } from '../slack/utils';
 
 const transport = new E2BCodeModeTransport();
 
-function codeTools(mcp: Awaited<ReturnType<typeof mcpTools>>) {
-  return {
-    ...mcp,
-    search_slack: slackTools.search_slack,
-    read_conversation_history: slackTools.read_conversation_history,
-    list_threads: slackTools.list_threads,
-    get_user: slackTools.get_user,
-    get_channel_info: slackTools.get_channel_info,
-    list_channels: slackTools.list_channels,
-    get_permalink: slackTools.get_permalink,
-    get_slack_file: slackTools.get_slack_file,
-    summarize_thread: slackTools.summarize_thread,
-    list_canvases: canvasTools.list_canvases,
-    read_canvas: canvasTools.read_canvas,
-    lookup_canvas_sections: canvasTools.lookup_canvas_sections,
-  };
-}
+// Read-only on purpose: model-written programs never get a tool that posts,
+// uploads, reacts, or edits, so the outbound approval rule has no way around it.
+export const codeModeSlackTools = {
+  search_slack: slackTools.search_slack,
+  read_conversation_history: slackTools.read_conversation_history,
+  list_threads: slackTools.list_threads,
+  get_user: slackTools.get_user,
+  get_channel_info: slackTools.get_channel_info,
+  list_channels: slackTools.list_channels,
+  get_permalink: slackTools.get_permalink,
+  get_slack_file: slackTools.get_slack_file,
+  summarize_thread: slackTools.summarize_thread,
+  list_canvases: canvasTools.list_canvases,
+  read_canvas: canvasTools.read_canvas,
+  lookup_canvas_sections: canvasTools.lookup_canvas_sections,
+};
 
 async function getSandboxTools(
   requestContext?: RequestContext
@@ -62,7 +62,7 @@ async function createCodeModeInstance({
 }: {
   workspaceAccess: boolean;
 }) {
-  const slackCodeTools = codeTools(await mcpTools());
+  const slackCodeTools = { ...(await mcpTools()), ...codeModeSlackTools };
   const tools = workspaceAccess
     ? { ...slackCodeTools, ...(await getSandboxTools()) }
     : slackCodeTools;
@@ -98,7 +98,11 @@ async function createCodeModeInstance({
     if (!execute) {
       throw new Error('Slack code mode is not executable.');
     }
-    return capResult(await execute(input, context));
+    // A copy, so the flag that stops these tools joining channels does not leak
+    // into the rest of the turn's direct tool calls.
+    const requestContext = new RequestContext(context.requestContext.entries());
+    requestContext.set(slackReadOnlyKey, true);
+    return capResult(await execute(input, { ...context, requestContext }));
   };
 
   return mode;

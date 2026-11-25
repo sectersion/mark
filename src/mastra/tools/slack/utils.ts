@@ -1,9 +1,14 @@
+import { SlackFormatConverter } from '@chat-adapter/slack';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { Message } from 'chat';
 import { z } from 'zod';
+import { env } from '@/env';
 import { slack } from '../../chat/client';
 import { chat } from '../../chat/instance';
+import { resolveTarget } from '../../chat/target';
 import { chatChannelId, parseSlackId, rawId, threadIdOf } from '../../lib/ids';
 import { logger } from '../../lib/logger';
+import { isOwner } from '../../lib/owner';
 import type { ChannelContext, Target } from '../../types';
 
 const slackErrorSchema = z.looseObject({
@@ -73,40 +78,167 @@ export async function assertReadableResource({
   );
 }
 
-export function assertCanPostTo({
+export function canPostDirect({
+  targetThreadId,
+  targetChannelId,
+  currentThreadId,
+  ownerDmChannelId,
+}: {
+  targetThreadId: string | undefined;
+  targetChannelId: string | undefined;
+  currentThreadId: string | undefined;
+  ownerDmChannelId: string | undefined;
+}): boolean {
+  if (targetThreadId !== undefined && targetThreadId === currentThreadId) {
+    return true;
+  }
+  return (
+    targetChannelId !== undefined &&
+    ownerDmChannelId !== undefined &&
+    rawId(targetChannelId) === rawId(ownerDmChannelId)
+  );
+}
+
+let ownerDm: Promise<string | undefined> | undefined;
+
+export function ownerDmChannelId(): Promise<string | undefined> {
+  const pending =
+    ownerDm ??
+    chat()
+      .openDM(env.OWNER_SLACK_USER_ID)
+      .then((dm) => slack.decodeThreadId(dm.id).channel)
+      .catch((error: unknown): undefined => {
+        // Undefined fails the outbound check closed; forget it so the next
+        // call retries instead of every post waiting on approval until a
+        // restart.
+        ownerDm = undefined;
+        logger.warn("[slack] could not open the owner's DM", { error });
+      });
+  ownerDm = pending;
+  return pending;
+}
+
+export async function isDirectTarget({
   target,
   ctx,
 }: {
   target: Target;
   ctx: ChannelContext;
-}): void {
+}): Promise<boolean> {
+  const ownerDmId = await ownerDmChannelId();
   if (target.type === 'user') {
-    if (!ctx.userId || rawId(target.id) !== rawId(ctx.userId)) {
-      throw new Error(
-        'gorkie can only DM the person currently asking, not a third party on their behalf. Ask that person to message gorkie directly instead.'
-      );
-    }
-    return;
+    return canPostDirect({
+      targetThreadId: undefined,
+      targetChannelId: isOwner(rawId(target.id)) ? ownerDmId : undefined,
+      currentThreadId: ctx.threadId,
+      ownerDmChannelId: ownerDmId,
+    });
   }
-
-  if (!ctx.channelId) {
-    throw new Error('No current Slack channel to compare against.');
-  }
-
-  const destination =
-    target.type === 'thread'
-      ? slack.decodeThreadId(target.id).channel
-      : target.id;
-  if (rawId(destination) !== rawId(ctx.channelId)) {
-    throw new Error(
-      'gorkie can only post into the channel this conversation is already in, not another channel. Ask someone in that channel to post there instead.'
-    );
-  }
+  return canPostDirect({
+    targetThreadId: target.type === 'thread' ? target.id : undefined,
+    targetChannelId:
+      target.type === 'thread' ? parseSlackId(target.id).channel : target.id,
+    currentThreadId: ctx.threadId,
+    ownerDmChannelId: ownerDmId,
+  });
 }
+
+const markdownConverter = new SlackFormatConverter();
+
+let cachedBotName: string | undefined;
+
+async function botDisplayName(botUserId: string | undefined): Promise<string> {
+  if (cachedBotName) {
+    return cachedBotName;
+  }
+  if (!botUserId) {
+    return 'gorkie';
+  }
+  const info = await slack.webClient.users
+    .info({ user: botUserId })
+    .catch(() => null);
+  const profile = info?.user?.profile;
+  const name = profile?.display_name || profile?.real_name || info?.user?.name;
+  if (!name) {
+    return 'gorkie';
+  }
+  cachedBotName = name;
+  return name;
+}
+
+async function resolveChannelAndThread(
+  target: Target
+): Promise<{ channel: string; threadTs?: string }> {
+  if (target.type === 'thread') {
+    const { channel, ts } = parseSlackId(target.id);
+    if (!channel) {
+      throw new Error(`${target.id} is not a Slack thread id.`);
+    }
+    return { channel, threadTs: ts };
+  }
+  if (target.type === 'channel') {
+    return { channel: rawId(target.id) };
+  }
+  const dm = await resolveTarget(target);
+  return { channel: rawId(dm.id) };
+}
+
+export async function sendMessage({
+  target,
+  markdown,
+  ctx,
+}: {
+  target: Target;
+  markdown: string;
+  ctx: ChannelContext;
+}): Promise<{ messageId: string; threadId: string | undefined }> {
+  if (target.type !== 'user') {
+    await joinChannel({ channelId: target.id });
+  }
+  const { channel, threadTs } = await resolveChannelAndThread(target);
+  const requesterUser = ctx.userId
+    ? await chat()
+        .getUser(ctx.userId)
+        .catch(() => null)
+    : null;
+  const requester = requesterUser?.userName ?? ctx.userName;
+  const bot = await botDisplayName(ctx.botUserId);
+  const credited = Boolean(requester) && target.type !== 'user';
+  const username = credited ? `${requester} [${bot}]` : bot;
+  const sent = await slack.webClient.chat.postMessage({
+    channel,
+    ...(threadTs ? { thread_ts: threadTs } : {}),
+    ...markdownConverter.toSlackPayload({ markdown }),
+    ...(credited && requesterUser?.avatarUrl
+      ? { icon_url: requesterUser.avatarUrl }
+      : {}),
+    username,
+  });
+  if (!sent.ts) {
+    throw new Error('Slack posted the message without returning its id.');
+  }
+  return {
+    messageId: sent.ts,
+    threadId: threadTs ? threadIdOf({ channel, ts: threadTs }) : undefined,
+  };
+}
+
+export const slackReadOnlyKey = 'slackReadOnly';
 
 const joinedChannels = new Set<string>();
 
-export async function joinChannel(channelId: string): Promise<void> {
+export async function joinChannel({
+  channelId,
+  requestContext,
+}: {
+  channelId: string;
+  requestContext?: RequestContext;
+}): Promise<void> {
+  // Joining posts a visible "joined" message in that channel, so read-only
+  // code mode never does it.
+  if (requestContext?.get(slackReadOnlyKey) === true) {
+    return;
+  }
   const id = rawId(channelId);
   if (joinedChannels.has(id)) {
     return;

@@ -55,6 +55,26 @@ test('payload length limits hold', () => {
   ).toBe(false);
 });
 
+test('an outbound message fits on its approval card', () => {
+  const target = { type: 'channel', id: 'slack:C123' };
+  expect(
+    approvalPayloadSchemas.outbound_message.safeParse({
+      target,
+      text: 'x'.repeat(2800),
+    }).success
+  ).toBe(true);
+  expect(
+    approvalPayloadSchemas.outbound_message.safeParse({
+      target,
+      text: 'x'.repeat(2801),
+    }).success
+  ).toBe(false);
+  expect(
+    approvalPayloadSchemas.outbound_message.safeParse({ target, text: '' })
+      .success
+  ).toBe(false);
+});
+
 test('an approval row whose payload belongs to another kind is rejected', () => {
   const row = {
     id: '6f1c2c3e-8d7a-4b6e-9f0a-1b2c3d4e5f60',

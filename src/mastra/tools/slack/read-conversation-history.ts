@@ -76,7 +76,10 @@ export const readConversationHistoryTool = createTool({
       channelId: chId,
       currentThreadId: ctx.threadId,
     });
-    await joinChannel(chId);
+    await joinChannel({
+      channelId: chId,
+      requestContext: context?.requestContext,
+    });
 
     spendSlackCall(context?.requestContext);
 

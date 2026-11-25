@@ -7,7 +7,7 @@ import { parseSlackId, rawId } from '../../lib/ids';
 import { type Target, targetSchema } from '../../types';
 import { input, output } from '../../types/tools/index';
 import { requireSandbox } from '../../workspace';
-import { assertCanPostTo, joinChannel } from './utils';
+import { isDirectTarget, joinChannel } from './utils';
 
 async function slackDestination(
   target: Target
@@ -28,7 +28,7 @@ async function slackDestination(
 export const uploadFileTool = createTool({
   id: 'upload_file',
   description:
-    'Upload a file from the sandbox to Slack. Defaults to the current thread; pass target to send it elsewhere. Channel and thread targets must be in the channel this conversation is already in; user targets must be the requester themselves.',
+    "Upload a file from the sandbox to Slack. Defaults to the current thread. The only other allowed target is the owner's own DM; anything else is refused.",
   inputSchema: input({
     path: z
       .string()
@@ -46,7 +46,7 @@ export const uploadFileTool = createTool({
       .describe('Optional message to post alongside the file.'),
     target: targetSchema
       .optional()
-      .describe('Optional destination other than the current thread.'),
+      .describe("Optional destination: only the owner's own DM."),
   }),
   outputSchema: output({
     filename: z.string(),
@@ -85,9 +85,13 @@ export const uploadFileTool = createTool({
     if (!resolved) {
       throw new Error('No current thread to upload to.');
     }
-    assertCanPostTo({ target: resolved, ctx });
+    if (!(await isDirectTarget({ target: resolved, ctx }))) {
+      throw new Error(
+        "Files can only go to the current thread or the owner's own DM. A file cannot wait on the owner's approval, so it was not sent. Upload it here and let the owner forward it."
+      );
+    }
     if (resolved.type !== 'user') {
-      await joinChannel(resolved.id);
+      await joinChannel({ channelId: resolved.id });
     }
     const destination = await slackDestination(resolved);
 

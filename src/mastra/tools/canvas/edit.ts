@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { slack } from '../../chat/client';
 import { channelContext } from '../../lib/context';
 import { input, output } from '../../types/tools/index';
-import { assertReadableResource } from '../slack/utils';
+import { canPostDirect, ownerDmChannelId } from '../slack/utils';
 import { canvasIdSchema } from './utils';
 
 const markdownContentSchema = z.object({
@@ -49,7 +49,7 @@ const canvasChangeSchema = z.discriminatedUnion('operation', [
 export const editCanvasTool = createTool({
   id: 'edit_canvas',
   description:
-    'Edit a Slack canvas by applying ordered markdown changes: insert, replace, or delete sections. Use lookup_canvas_sections to find section ids first. Canvas mentions use ![](@USER_ID) and ![](#CHANNEL_ID), not <@U123>.',
+    "Edit a Slack canvas by applying ordered markdown changes: insert, replace, or delete sections. Only canvases shared in the owner's own DM, and nowhere else, can be edited. Use lookup_canvas_sections to find section ids first. Canvas mentions use ![](@USER_ID) and ![](#CHANNEL_ID), not <@U123>.",
   inputSchema: input({
     canvasId: canvasIdSchema,
     changes: z.tuple([canvasChangeSchema]).rest(canvasChangeSchema),
@@ -65,13 +65,30 @@ export const editCanvasTool = createTool({
   execute: async ({ canvasId, changes }, context) => {
     const info = await slack.webClient.files.info({ file: canvasId });
     const ctx = channelContext(context.requestContext);
-    await assertReadableResource({
-      channelIds: [
-        ...(info.file?.channels ?? []),
-        ...(info.file?.groups ?? []),
-      ],
-      currentThreadId: ctx.threadId,
-    });
+    const ownerDm = await ownerDmChannelId();
+    const sharedIn = [
+      ...(info.file?.channels ?? []),
+      ...(info.file?.groups ?? []),
+      ...(info.file?.ims ?? []),
+    ];
+    // An edit is visible to everyone the canvas is shared with and cannot wait
+    // on the owner's approval, so only a canvas shared in the owner's own DM
+    // alone is editable.
+    if (
+      sharedIn.length === 0 ||
+      !sharedIn.every((channelId) =>
+        canPostDirect({
+          targetThreadId: undefined,
+          targetChannelId: channelId,
+          currentThreadId: ctx.threadId,
+          ownerDmChannelId: ownerDm,
+        })
+      )
+    ) {
+      throw new Error(
+        "Only canvases shared in the owner's own DM, and nowhere else, can be edited."
+      );
+    }
     try {
       await slack.webClient.canvases.edit({
         canvas_id: canvasId,

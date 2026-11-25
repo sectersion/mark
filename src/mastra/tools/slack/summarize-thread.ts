@@ -45,7 +45,10 @@ export const summarizeThreadTool = createTool({
 
     const channelId = chatChannelId(slack.channelIdFromThreadId(target));
     await assertReadableChannel({ channelId, currentThreadId: ctx.threadId });
-    await joinChannel(channelId);
+    await joinChannel({
+      channelId,
+      requestContext: context?.requestContext,
+    });
 
     spendSlackCall(context?.requestContext);
 

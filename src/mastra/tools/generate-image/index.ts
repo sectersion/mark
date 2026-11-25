@@ -7,7 +7,7 @@ import { requestImages } from './request';
 export const generateImageTool = createTool({
   id: 'generate_image',
   description:
-    'Generate or edit AI images. With just a prompt it generates from scratch. Pass referenceImages (sandbox file paths to existing images) to edit them instead: change something, add something, restyle, or combine several. Write results into the sandbox downloads/ directory. Use upload_file afterward to send them to Slack (defaults to the current thread; pass target for elsewhere) or process them first (resize, composite, edit) with other sandbox tools.',
+    "Generate or edit AI images. With just a prompt it generates from scratch. Pass referenceImages (sandbox file paths to existing images) to edit them instead: change something, add something, restyle, or combine several. Write results into the sandbox downloads/ directory. Use upload_file afterward to send them to Slack (the current thread, or the owner's own DM) or process them first (resize, composite, edit) with other sandbox tools.",
   inputSchema: input({
     prompt: z
       .string()

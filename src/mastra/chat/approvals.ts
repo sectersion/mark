@@ -6,7 +6,9 @@ import {
   resolveApproval,
   setApprovalCard,
 } from '../db/queries/approvals';
+import { writeAudit } from '../db/queries/audit';
 import { logger } from '../lib/logger';
+import { sendMessage } from '../tools/slack/utils';
 import type {
   Approval,
   ApprovalDecision,
@@ -171,7 +173,7 @@ async function onApprovalClick(event: ActionEvent): Promise<void> {
   await applyDecision(outcome.approval);
 }
 
-async function applyDecision(approval: Approval): Promise<void> {
+export async function applyDecision(approval: Approval): Promise<void> {
   switch (approval.kind) {
     case 'request':
       await tellRequester({
@@ -185,14 +187,43 @@ async function applyDecision(approval: Approval): Promise<void> {
     case 'standing_rule':
       return;
     case 'outbound_message':
-      // Sending the approved message is not wired up yet, so approving one
-      // only records the decision.
+      if (approval.status === 'approved') {
+        await sendApproved(approval);
+      }
       return;
     default: {
       const unhandled: never = approval;
       logger.error('[approvals] no effect for this kind', { unhandled });
     }
   }
+}
+
+async function sendApproved(
+  approval: Extract<Approval, { kind: 'outbound_message' }>
+): Promise<void> {
+  const { target, text } = approval.payload;
+  try {
+    await sendMessage({
+      target,
+      markdown: text,
+      ctx: {
+        userId: approval.requesterId ?? undefined,
+        botUserId: slack.botUserId,
+      },
+    });
+  } catch (error) {
+    logger.error('[approvals] approved message failed to send', {
+      error,
+      id: approval.id,
+      target,
+    });
+    return;
+  }
+  await writeAudit({
+    actor: 'mark',
+    action: 'post',
+    detail: { target, approvalId: approval.id },
+  });
 }
 
 async function tellRequester({

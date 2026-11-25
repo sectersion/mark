@@ -2,14 +2,14 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
 import { channelContext } from '../../lib/context';
-import { chatChannelId, parseSlackId } from '../../lib/ids';
+import { chatChannelId, parseSlackId, threadIdOf } from '../../lib/ids';
 import { input, output } from '../../types/tools/index';
-import { assertReadableChannel } from './utils';
+import { canPostDirect, ownerDmChannelId } from './utils';
 
 export const reactTool = createTool({
   id: 'react',
   description:
-    'Add or remove an emoji reaction on a Slack message by current channel timestamp, channel/message id, or message URL.',
+    "Add or remove an emoji reaction on a Slack message by current channel timestamp, channel/message id, or message URL. Only the message you are answering, the current thread's first message, or messages in the owner's own DM.",
   inputSchema: input({
     channelId: z
       .string()
@@ -55,10 +55,24 @@ export const reactTool = createTool({
     if (!target.ts) {
       throw new Error('Pass messageId or url.');
     }
-    await assertReadableChannel({
-      channelId: chatChannelId(target.channel),
-      currentThreadId: ctx.threadId,
-    });
+    // Only the triggering message and the thread root are known to sit in the
+    // current thread without another Slack call, so any other message fails
+    // closed.
+    const current = parseSlackId(ctx.messageId, { channel: ctx.channelId });
+    const isTriggeringMessage =
+      target.channel === current.channel && target.ts === current.ts;
+    if (
+      !canPostDirect({
+        targetThreadId: isTriggeringMessage ? ctx.threadId : threadIdOf(target),
+        targetChannelId: target.channel,
+        currentThreadId: ctx.threadId,
+        ownerDmChannelId: await ownerDmChannelId(),
+      })
+    ) {
+      throw new Error(
+        "Reactions are only allowed in the current thread or the owner's own DM."
+      );
+    }
 
     const emoji = emojiInput.replaceAll(':', '');
     const request = {
