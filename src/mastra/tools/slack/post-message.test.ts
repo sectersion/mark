@@ -213,17 +213,35 @@ test('a hostile target id is rejected by the schema', () => {
   }
 });
 
-test('existing target spellings still parse', () => {
+test('valid user, channel, thread and owner DM targets parse', () => {
   for (const target of [
     { type: 'user', id: 'UOTHER' },
     { type: 'user', id: 'W0123ABC' },
+    { type: 'user', id: 'UOWNER' },
     { type: 'channel', id: 'slack:C111' },
     { type: 'channel', id: 'G0123' },
-    { type: 'channel', id: 'slack:D222' },
     { type: 'thread', id: current },
-    { type: 'thread', id: 'slack:D222:' },
+    { type: 'thread', id: 'slack:G0123:1700000000.000100' },
   ]) {
     expect(targetSchema.safeParse(target).success).toBe(true);
+  }
+});
+
+test('an id that does not match its target type is rejected', () => {
+  for (const target of [
+    { type: 'channel', id: 'UOTHER' },
+    { type: 'channel', id: 'slack:UOTHER' },
+    { type: 'channel', id: 'slack:D333' },
+    { type: 'channel', id: 'D333' },
+    { type: 'thread', id: 'slack:UOTHER:1700000000.000100' },
+    { type: 'thread', id: 'slack:D333:1700000000.000100' },
+    { type: 'thread', id: 'slack:D222:' },
+    { type: 'thread', id: 'slack:C111' },
+    { type: 'user', id: 'C111' },
+    { type: 'user', id: 'D333' },
+    { type: 'user', id: 'slack:UOTHER' },
+  ]) {
+    expect(targetSchema.safeParse(target).success).toBe(false);
   }
 });
 
