@@ -7,8 +7,8 @@ if [ -z "${DATABASE_URL:-}" ]; then
 fi
 
 cd "$(dirname "$0")/.."
-mkdir -p backups
 umask 077
+mkdir -p backups
 
 out="backups/mark-$(date +%F).sql.gz"
 trap 'rm -f "$out.part"' EXIT

@@ -172,6 +172,6 @@ test('the card shows exactly the stored text, with hidden characters gone', asyn
   });
   const card = JSON.stringify(ownerDms);
   expect(payload.rule).toBe('reply in lowercase');
-  expect(card).toContain(JSON.stringify(payload.rule));
+  expect(card).toContain(JSON.stringify('```\nreply in lowercase\n```'));
   expect(card).not.toMatch(/[\u{E0000}-\u{E007F}\u200b]/u);
 });

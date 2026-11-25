@@ -181,14 +181,17 @@ outside any Slack event.**
   `index.d.ts:706-736`). A static string never throws.
 - Already called this way: `conversations.open({ users })` in
   `src/mastra/tools/slack/upload-file.ts:16`, `chat.postMessage` in
-  `src/mastra/tools/slack/post-message.ts:98`,
-  `conversations.members` in `src/mastra/lib/allowed-users.ts:69`.
+  `src/mastra/tools/slack/post-message.ts:98` (at the time of this spike;
+  `lib/allowed-users.ts`, which also called `conversations.members`, was
+  deleted in Task 6).
 - Scopes and interactivity are present in `slack-manifest.json`: `chat:write`
   (line 33), `im:write` (line 43), `interactivity.is_enabled: true`
   (lines 79-80).
 
 **What to do in Task 8:** either route works. The shorter one reuses the Chat
-SDK card pattern `src/mastra/chat/onboarding.ts` already uses:
+SDK card pattern the opt-in code in `src/mastra/chat/onboarding.ts` used at
+the time (that file was deleted in Task 6; `src/mastra/chat/approvals.ts` now
+uses the same pattern):
 `const dm = await chat().openDM(env.OWNER_SLACK_USER_ID)`
 (`chat/dist/index.js:3251-3262`, which calls `conversations.open` and returns a
 top-level DM thread, `@chat-adapter/slack/dist/index.js:4171-4191`), then

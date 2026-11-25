@@ -202,7 +202,8 @@ of what to read and confirm, not a statement of what they say.
 ## Injection evals
 
 `test/injection.test.ts` calls a live model, so plain `bun test` skips the live
-cases (they also skip unless `INJECTION_EVALS=1` and the gateway key is not the placeholder `x`) (only the no-model helper checks run). The owner runs them with a real `AI_GATEWAY_API_KEY` in `.env`:
+cases and runs only the no-model helper checks. The owner runs them with a real
+`AI_GATEWAY_API_KEY` in `.env`:
 
 ```
 bun run test:evals

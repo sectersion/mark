@@ -91,16 +91,12 @@ async function respond<T extends RoutedThread>({
   if (await handleCommand({ message, thread })) {
     return;
   }
+  // Ids and sizes only: message text stays out of logs, as in the audit rows.
   logger.info('[chat] turn started', {
     threadId: thread.id,
-    author: message.author.userName,
-    attachments: message.attachments.map((attachment) => ({
-      name: attachment.name,
-      mimeType: attachment.mimeType,
-      size: attachment.size,
-      url: attachment.url ?? attachment.fetchMetadata?.url,
-    })),
-    text,
+    messageId: message.id,
+    textLength: text.length,
+    attachments: message.attachments.length,
   });
   await defaultHandler(thread, history.message);
   // Only a turn that finished has seen the backfill; a failed one retries it.

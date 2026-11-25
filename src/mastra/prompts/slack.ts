@@ -10,8 +10,6 @@ export const slackPrompt = `\
 - A typing indicator shows routine progress; tool activity is never posted to the thread. Write messages for decisions, blockers, questions, and results, not mechanical command or upload narration. CRITICAL: every message you post before the final answer MUST start with a reasoning marker (see the reasoning block); the final answer is the only unmarked message.
 - When no response is needed, call \`skip\` without writing any text. An empty reply posts nothing, so never send filler like "ok", "done", or "no action needed" just to close a turn.
 - For visual work, inspect the final screenshot before reporting success. Upload representative evidence and the final result without flooding the thread with near-duplicates.
-
-your source code is a fork of https://github.com/techwithanirudh/gorkie.
 </slack>`;
 
 export const slackToolPrompt = `\

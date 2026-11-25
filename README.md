@@ -9,42 +9,66 @@ under one bot identity and never posts as the owner.
 
 ## Status
 
-mark is mid-conversion from gorkie. Today the code still has gorkie's
-feature set, listed under [What works today](#what-works-today). The mark
-design is written down and not yet built. Read it in
-[docs/superpowers/specs/2026-11-24-mark-design.md](./docs/superpowers/specs/2026-11-24-mark-design.md).
+Phase 1 (the foundation) is built on the `feat/mark-phase-1` branch: routing
+by sender, the receptionist, approval cards, the kill switch, the audit log,
+owner-scoped memory and standing rules, the outbound rule, the new voices,
+daily caps, and the operations runbook. The schedule, the briefing, and
+self-improvement are later phases. The design is in
+[docs/superpowers/specs/2026-11-24-mark-design.md](./docs/superpowers/specs/2026-11-24-mark-design.md)
+and the runbook in [docs/operations.md](./docs/operations.md).
 
 ## What mark is meant to be
 
 - **One Slack app, two agents, routed by sender.** Only the owner (matched by
   Slack user ID) reaches **mark**, the privileged agent. Anyone else who pings
-  the app reaches the **receptionist**, which can take a message, show
-  free/busy to allowlisted people, and ask the owner, and nothing else. Everything a non-owner says
-  is treated as data, never as instructions.
-- **Owns the schedule.** No external calendar. Events live in Postgres, with
-  `.ics` import and export.
-- **Daily briefing.** An engineering radar across the owner's GitHub orgs
-  (PRs awaiting review, CI failures, stale PRs) plus news tuned to the owner's
-  interests.
-- **Approval by DM card.** Meeting requests from other people, new skills,
-  and new subagents all wait for the owner to tap Approve.
-- **Learns and extends itself.** It remembers preferences, writes its own
-  skills, defines subagents, and connects to MCP servers when the owner
-  supplies the details. It can open pull requests against its own code. It
-  never merges them. Branch protection on `main` requires an approving
-  review.
+  the app reaches the **receptionist**, which can take a message for the owner
+  and nothing else. Everything a non-owner says is treated as data, never as
+  instructions.
+- **Owns the schedule** (later phase). No external calendar. Events live in
+  Postgres, with `.ics` import and export.
+- **Daily briefing** (later phase). An engineering radar across the owner's
+  GitHub orgs plus news tuned to the owner's interests.
+- **Approval by DM card.** Messages for the owner, standing rules, and
+  anything mark would send to someone else wait for the owner to tap Approve.
+- **Learns and extends itself** (later phase). It remembers preferences, writes
+  its own skills, defines subagents, and can open pull requests against its
+  own code. It never merges them. Branch protection on `main` requires an
+  approving review.
 
 ## What works today
 
-Apart from routing by sender, this is inherited from gorkie and works as it
-did there.
+Built in Phase 1:
 
-- Slack-native replies for mentions, DMs, and subscribed thread follow-ups,
-  streamed as they generate, with a typing indicator.
 - Routing by sender: only `OWNER_SLACK_USER_ID` reaches mark, and only in a DM
-  or a thread nobody else has posted in. Everyone else, and the owner in a
-  thread with other people in it, gets the receptionist. While mark is paused,
-  everyone but the owner is told it is offline.
+  or a thread nobody else (no other person, bot, or app) has posted in.
+  Everyone else, and the owner in a thread with other people in it, gets the
+  receptionist. A followed thread only answers a stranger who mentions mark.
+- The receptionist: a separate agent whose only tool is `pass_to_owner`, rate
+  limited per person, which turns a request into an approval card in the
+  owner's DM. Approve or decline is told back to the requester.
+- Approval cards with Approve/Decline buttons that only the owner can press.
+  Cards expire after 24 hours (standing rules after 7 days). Mastra's own tool
+  approval buttons are owner-only too.
+- Outbound rule: posting anywhere other than the current thread or the
+  owner's own DM goes through an approval card and is sent exactly as
+  approved. Canvases refuse to mention anyone but the owner.
+- Kill switch: owner-only `!pause` and `!resume`. While paused, scheduled
+  tasks and GitHub writes stop and everyone else is told mark is offline.
+- Audit log in Postgres for everything mark does that touches someone else or
+  changes its behavior, readable by the owner through the `read_audit` tool.
+- Working memory scoped to the owner, and standing rules that only take
+  effect after the owner approves them (revoke them with the SQL in
+  `docs/operations.md`).
+- Daily caps (owner turns and receptionist replies) that alert the owner and
+  shut strangers out until Chicago midnight.
+- The Mastra HTTP server binds to loopback and rejects any non-loopback Host
+  or Origin; in production it serves no API at all.
+- App Home settings are owner-only; everyone else sees a front desk page.
+
+Inherited from gorkie, available to mark only:
+
+- Slack-native replies for mentions, DMs, and followed threads, streamed as
+  they generate, with a typing indicator.
 - Per-thread [E2B][e2b] sandbox sessions: isolated cloud VMs, never the host.
   Full filesystem access (`read_file`/`write_file`/`edit_file`/`list_files`/
   `delete_file`/`file_stat`) plus shell command execution
@@ -55,20 +79,20 @@ did there.
 - Web search and page fetching via [Exa][exa], plus a Slack "code mode" tool
   for query-driven or exhaustive conversation analysis.
 - Slack-native tools: read and summarize conversation history, list threads
-  and channels, inspect channels and users, post to another
-  thread/channel/DM, upload and download files, react, leave a thread. It
-  reads only the current conversation and public channels, and DMs only the
-  person who asked.
+  and channels, inspect channels and users, upload and download files, react,
+  leave a thread. It reads only the current conversation and public channels.
 - Slack Canvas tools: create, list, read, edit, and look up sections.
 - Recurring scheduled tasks (cron-based, create/list/pause/resume/delete).
-  Each run posts back into the conversation where it was scheduled.
+  Creating one needs the owner's approval. Each run posts back into the
+  conversation where it was scheduled.
 - GitHub tools and user-connected MCP servers.
 - AI image generation, uploaded back into the Slack thread as a file.
 - Most tools load on demand through tool search, so the base tool list and the
   prompt stay small.
 - [Observational Memory][om] compresses a long conversation into an
   observation log instead of carrying the full raw history.
-- Mastra Observability tracing, stored locally in DuckDB.
+- Mastra Observability tracing, stored locally in DuckDB in development and
+  sent to Langfuse.
 
 See [TODO.md](./TODO.md) for open work and known issues.
 
@@ -110,8 +134,7 @@ bun run dev
 ```
 
 Local development uses Slack Socket Mode, so the bot needs no public HTTP
-tunnel to receive Slack events. It logs `[gorkie] online` once connected (the
-log line has not been renamed yet).
+tunnel to receive Slack events. It logs `[agent] online` once connected.
 
 Do not run two local instances against the same Slack app token. Their Socket
 Mode connections race, and the resulting behavior is hard to diagnose.

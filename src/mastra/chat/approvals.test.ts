@@ -1,6 +1,11 @@
 import { expect, test } from 'bun:test';
 import type { Approval } from '../types';
-import { buttonDecision, escapeMrkdwn, expiredByPress } from './approvals';
+import {
+  buttonDecision,
+  cardBody,
+  escapeMrkdwn,
+  expiredByPress,
+} from './approvals';
 
 const id = '0b6f1c8e-3f5a-4d2b-9c1e-7a8b9c0d1e2f';
 
@@ -53,7 +58,7 @@ test('buttonDecision rejects a missing or empty value', () => {
 
 test('buttonDecision rejects an unknown action id', () => {
   expect(
-    buttonDecision({ actionId: 'opt_in_accept', value: id })
+    buttonDecision({ actionId: 'unknown_action', value: id })
   ).toBeUndefined();
   expect(
     buttonDecision({ actionId: `tool_approve:${id}`, value: id })
@@ -77,4 +82,20 @@ test('escapeMrkdwn neutralizes mentions, links and entities', () => {
   );
   expect(escapeMrkdwn('a &lt; b & c')).toBe('a &amp;lt; b &amp; c');
   expect(escapeMrkdwn('plain words')).toBe('plain words');
+});
+
+test('a URL in stranger text sits in a code block, so Slack does not link it', () => {
+  const body = cardBody({
+    ...expiredRequest,
+    payload: {
+      summary:
+        'urgent, log in at https://evil.example now ```<https://evil.example|here>',
+      wantsReply: true,
+    },
+  });
+  expect(body).toStartWith('```\n');
+  expect(body).toEndWith('\n```');
+  expect(body.slice(3, -3)).not.toContain('`');
+  expect(body).toContain('https://evil.example now');
+  expect(body).not.toContain('<https://');
 });

@@ -1,5 +1,6 @@
-import { afterAll, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { Message, parseMarkdown } from 'chat';
+import { logger } from '../lib/logger';
 
 const realReceptionist = { ...(await import('./receptionist')) };
 const realPause = { ...(await import('../lib/pause')) };
@@ -365,4 +366,25 @@ test('an app post with the owner id in the history taints the thread', async () 
   await onMention(thread, current, defaultHandler);
   expect(turns).toEqual([]);
   expect(receptionistCalls).toEqual([{ text: 'hi', userId: 'UOWNER' }]);
+});
+
+test("an owner turn logs ids and sizes, never the owner's text", async () => {
+  const logged: unknown[] = [];
+  const info = spyOn(logger, 'info').mockImplementation((...args) => {
+    logged.push(args);
+  });
+  const current = message({ id: 'm12', userId: 'UOWNER', text: 'my secret' });
+  const { thread, defaultHandler } = fakeThread({ newestFirst: [current] });
+  await onMention(thread, current, defaultHandler);
+  info.mockRestore();
+  expect(logged).toContainEqual([
+    '[chat] turn started',
+    {
+      threadId: 'slack:C1:1.0',
+      messageId: 'm12',
+      textLength: 'my secret'.length,
+      attachments: 0,
+    },
+  ]);
+  expect(JSON.stringify(logged)).not.toContain('secret');
 });

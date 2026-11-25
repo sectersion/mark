@@ -80,7 +80,7 @@ export function expiredByPress(
   return outcome.result === 'expired' ? outcome.approval : undefined;
 }
 
-function shownText(approval: Approval): string {
+function storedText(approval: Approval): string {
   switch (approval.kind) {
     case 'request':
       return approval.payload.summary;
@@ -92,7 +92,15 @@ function shownText(approval: Approval): string {
 }
 
 // The card shows the stored payload, never the caller's copy, so the owner
-// approves exactly the text that is kept and acted on.
+// approves exactly the text that is kept and acted on. It sits in a code block
+// because the text is untrusted and Slack would otherwise turn a bare URL in
+// it into a live link in the owner's DM; backticks are dropped so it cannot
+// close the block.
+export function cardBody(approval: Approval): string {
+  const text = escapeMrkdwn(storedText(approval).replaceAll('`', ''));
+  return `\`\`\`\n${text}\n\`\`\``;
+}
+
 export async function postApprovalCard({
   approval,
 }: {
@@ -106,7 +114,7 @@ export async function postApprovalCard({
         ...(approval.kind === 'outbound_message'
           ? [CardText(`to ${renderTarget(approval.payload.target)}`)]
           : []),
-        CardText(escapeMrkdwn(shownText(approval))),
+        CardText(cardBody(approval)),
         ...(approval.requesterId && approval.kind !== 'outbound_message'
           ? [CardText(`from <@${approval.requesterId}>`, { style: 'muted' })]
           : []),
