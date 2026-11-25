@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
+import { auditSend } from '../../lib/audit-send';
 import { channelContext } from '../../lib/context';
 import { rawId } from '../../lib/ids';
 import { input, output } from '../../types/tools/index';
@@ -71,6 +72,12 @@ export const createCanvasTool = createTool({
       if (!response.canvas_id) {
         throw new Error('Slack created the canvas without returning its id.');
       }
+      await auditSend({
+        kind: 'canvas_create',
+        mode,
+        canvasId: response.canvas_id,
+        channelId,
+      });
       return {
         mode,
         canvasId: response.canvas_id,
@@ -94,6 +101,12 @@ export const createCanvasTool = createTool({
           'Slack created the channel canvas without returning its id.'
         );
       }
+      await auditSend({
+        kind: 'canvas_create',
+        mode,
+        canvasId: response.canvas_id,
+        channelId: targetChannelId,
+      });
       return {
         mode,
         channelId: `slack:${rawId(targetChannelId)}`,

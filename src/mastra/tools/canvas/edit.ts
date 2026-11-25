@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
+import { auditSend } from '../../lib/audit-send';
 import { channelContext } from '../../lib/context';
 import { input, output } from '../../types/tools/index';
 import { canPostDirect, ownerDmChannelId } from '../slack/utils';
@@ -107,6 +108,7 @@ export const editCanvasTool = createTool({
       }
       throw error;
     }
+    await auditSend({ kind: 'canvas_edit', canvasId });
     return { canvasId };
   },
 });

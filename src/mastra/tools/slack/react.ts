@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
+import { auditSend } from '../../lib/audit-send';
 import { channelContext } from '../../lib/context';
 import { chatChannelId, parseSlackId, threadIdOf } from '../../lib/ids';
 import { input, output } from '../../types/tools/index';
@@ -82,6 +83,7 @@ export const reactTool = createTool({
     };
     if (action === 'remove') {
       await slack.webClient.reactions.remove(request);
+      await auditSend({ kind: 'reaction', action, ...request });
       return {
         action,
         channelId: chatChannelId(target.channel),
@@ -91,6 +93,7 @@ export const reactTool = createTool({
     }
 
     await slack.webClient.reactions.add(request);
+    await auditSend({ kind: 'reaction', action, ...request });
     return {
       action,
       channelId: chatChannelId(target.channel),

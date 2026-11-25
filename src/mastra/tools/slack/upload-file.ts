@@ -2,6 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
 import { upload } from '../../config';
+import { auditSend } from '../../lib/audit-send';
 import { channelContext } from '../../lib/context';
 import { parseSlackId, rawId } from '../../lib/ids';
 import { type Target, targetSchema } from '../../types';
@@ -149,6 +150,7 @@ export const uploadFileTool = createTool({
       thread_ts: destination.threadTs,
     });
     const fileId = created.file_id;
+    await auditSend({ kind: 'file', target: resolved, fileId });
 
     return {
       filename: name,

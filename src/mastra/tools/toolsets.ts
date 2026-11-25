@@ -4,6 +4,7 @@ import { submitFeedbackTool } from './feedback';
 import { fetchUrlTool } from './fetch-url';
 import { generateImageTool } from './generate-image';
 import { proposeRuleTool } from './propose-rule';
+import { readAuditTool } from './read-audit';
 import { scheduledTaskTools } from './scheduled-tasks';
 import { searchWebTool } from './search-web';
 import { skipTool } from './skip';
@@ -30,6 +31,7 @@ export async function orchestratorTools() {
     upload_file: slackTools.upload_file,
     post_message: slackTools.post_message,
     propose_rule: proposeRuleTool,
+    read_audit: readAuditTool,
     skip: skipTool,
     wait: waitTool,
   };

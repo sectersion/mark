@@ -1,5 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { sandbox as sandboxConfig } from '../../config';
+import { auditSend } from '../../lib/audit-send';
 import { sh } from '../../lib/utils';
 import { branchSchema, repositorySchema } from '../../types';
 import { input } from '../../types/tools/index';
@@ -50,7 +51,7 @@ export const pushTool = ({
           cwd: path,
           sandbox,
         });
-      return await withCredential({
+      const pushed = await withCredential({
         operation: async () => {
           try {
             await push();
@@ -89,5 +90,7 @@ export const pushTool = ({
         sandbox,
         userId,
       });
+      await auditSend({ kind: 'github_push', repository, branch });
+      return pushed;
     },
   });

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { postApprovalCard } from '../../chat/approvals';
 import { approval } from '../../config';
 import { createApproval } from '../../db/queries/approvals';
+import { auditSend } from '../../lib/audit-send';
 import { channelContext } from '../../lib/context';
 import { approvalPayloadSchemas, targetSchema } from '../../types';
 import { input, output } from '../../types/tools/index';
@@ -54,10 +55,9 @@ Errors: channel_not_found usually means the bot isn't a member of that private c
       return { result: "waiting on the owner's approval" };
     }
     try {
-      return {
-        result: 'sent',
-        ...(await sendMessage({ target, markdown: message, ctx })),
-      };
+      const sent = await sendMessage({ target, markdown: message, ctx });
+      await auditSend({ kind: 'message', target, messageId: sent.messageId });
+      return { result: 'sent', ...sent };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       if (reason.includes('channel_not_found')) {
