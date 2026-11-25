@@ -23,6 +23,32 @@ test('a canvas mention of someone other than the owner is refused', () => {
   }
 });
 
+test.each([
+  ['a backslash escape', '![](\\@UOTHER)'],
+  ['a decimal entity', '![](&#64;UOTHER)'],
+  ['a zero-padded decimal entity', '![](&#00064;UOTHER)'],
+  ['a hex entity', '![](&#x40;UOTHER)'],
+  ['a zero-padded hex entity', '![](&#X0040;UOTHER)'],
+  ['a named entity', '![](&commat;UOTHER)'],
+  ['percent-encoding', '![](%40UOTHER)'],
+  ['lowercase percent-encoding', '![](%40uother)'],
+  ['double percent-encoding', '![](%2540UOTHER)'],
+  ['a fullwidth at sign', '![](＠UOTHER)'],
+  ['a reference definition', '![][x]\n\n[x]: @UOTHER'],
+  ['an HTML link', '<a href="@UOTHER">hi</a>'],
+  ['an owner token run into another', '![](@UOWNER@UOTHER)'],
+  ['an owner id with extra characters', '![](@UOWNERX)'],
+  ['a bare token in prose', 'cc @UOTHER on this'],
+])('a non-owner mention written as %s is refused', (_, markdown) => {
+  expect(() => assertNoThirdPartyMentions(markdown)).toThrow(refused);
+});
+
+test('a plain email address is allowed', () => {
+  expect(() =>
+    assertNoThirdPartyMentions('mail a@example.com about it')
+  ).not.toThrow();
+});
+
 test('a document with any non-owner mention is refused, even beside the owner', () => {
   expect(() =>
     assertNoThirdPartyMentions(
