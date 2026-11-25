@@ -2,7 +2,7 @@ import { afterAll, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { RequestContext } from '@mastra/core/request-context';
 import { noopObserve } from '@mastra/core/tools';
 import { slack } from '../../chat/client';
-import type { Approval } from '../../types';
+import { type Approval, approvalSchema, targetSchema } from '../../types';
 
 const realApprovals = { ...(await import('../../db/queries/approvals')) };
 const realCards = { ...(await import('../../chat/approvals')) };
@@ -44,9 +44,8 @@ mock.module('./utils', () => ({
   ownerDmChannelId: () => Promise.resolve('D222'),
 }));
 
-const { canPostDirect, joinChannel, slackReadOnlyKey } = await import(
-  './utils'
-);
+const { canPostDirect, joinChannel, renderTarget, slackReadOnlyKey } =
+  await import('./utils');
 const { postMessageTool } = await import('./post-message');
 
 afterAll(() => {
@@ -189,4 +188,65 @@ test('a read-only request context never joins a channel', async () => {
   await joinChannel({ channelId: 'slack:C444', requestContext });
   expect(join).not.toHaveBeenCalled();
   join.mockRestore();
+});
+
+const hostileIds = [
+  'slack:C111>|<!channel>',
+  'UOTHER> <!channel',
+  'UOTHER\n<!channel>',
+  '<!channel>',
+  'C111|evil',
+  `U${'A'.repeat(80)}`,
+];
+
+test('a hostile target id is rejected by the schema', () => {
+  for (const id of hostileIds) {
+    for (const type of ['user', 'channel', 'thread']) {
+      expect(targetSchema.safeParse({ type, id }).success).toBe(false);
+    }
+    expect(
+      approvalSchema.safeParse({
+        ...approval,
+        payload: { target: { type: 'user', id }, text: 'hi' },
+      }).success
+    ).toBe(false);
+  }
+});
+
+test('existing target spellings still parse', () => {
+  for (const target of [
+    { type: 'user', id: 'UOTHER' },
+    { type: 'user', id: 'W0123ABC' },
+    { type: 'channel', id: 'slack:C111' },
+    { type: 'channel', id: 'G0123' },
+    { type: 'channel', id: 'slack:D222' },
+    { type: 'thread', id: current },
+    { type: 'thread', id: 'slack:D222:' },
+  ]) {
+    expect(targetSchema.safeParse(target).success).toBe(true);
+  }
+});
+
+test('a hostile target id never reaches an approval card', async () => {
+  const results = await Promise.all(
+    hostileIds.map((id) =>
+      postMessageTool.execute?.(
+        { target: { type: 'user', id }, message: 'lunch?' },
+        { requestContext: ownerTurn(), observe: noopObserve }
+      )
+    )
+  );
+  for (const result of results) {
+    expect(result).toMatchObject({ error: true });
+  }
+  expect(created).toHaveLength(0);
+  expect(cards).toHaveLength(0);
+});
+
+test('targets render as Slack mentions the owner can check', () => {
+  expect(renderTarget({ type: 'user', id: 'UOTHER' })).toBe('<@UOTHER>');
+  expect(renderTarget({ type: 'channel', id: 'slack:C111' })).toBe('<#C111>');
+  expect(renderTarget({ type: 'thread', id: current })).toBe(
+    'a thread in <#C111> (ts 1700000000.000100)'
+  );
 });

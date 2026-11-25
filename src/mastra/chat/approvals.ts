@@ -8,7 +8,11 @@ import {
 } from '../db/queries/approvals';
 import { writeAudit } from '../db/queries/audit';
 import { logger } from '../lib/logger';
-import { sendMessage } from '../tools/slack/utils';
+import {
+  renderTarget,
+  sendMessage,
+  slackErrorSchema,
+} from '../tools/slack/utils';
 import type {
   Approval,
   ApprovalDecision,
@@ -87,8 +91,11 @@ export async function postApprovalCard({
     Card({
       title: cardTitles[approval.kind],
       children: [
+        ...(approval.kind === 'outbound_message'
+          ? [CardText(`to ${renderTarget(approval.payload.target)}`)]
+          : []),
         CardText(escapeMrkdwn(text)),
-        ...(approval.requesterId
+        ...(approval.requesterId && approval.kind !== 'outbound_message'
           ? [CardText(`from <@${approval.requesterId}>`, { style: 'muted' })]
           : []),
         Actions([
@@ -217,6 +224,21 @@ async function sendApproved(
       id: approval.id,
       target,
     });
+    const reason =
+      slackErrorSchema.safeParse(error).data?.data?.error ?? 'Slack refused it';
+    await chat()
+      .openDM(env.OWNER_SLACK_USER_ID)
+      .then((dm) =>
+        dm.post(
+          `couldn't send that approved message to ${renderTarget(target)}: ${escapeMrkdwn(reason)}`
+        )
+      )
+      .catch((notifyError: unknown) =>
+        logger.error('[approvals] could not tell the owner the send failed', {
+          error: notifyError,
+          id: approval.id,
+        })
+      );
     return;
   }
   await writeAudit({

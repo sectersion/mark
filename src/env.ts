@@ -45,7 +45,6 @@ export const env = createEnv({
 
     EXA_API_KEY: z.string().min(1),
 
-    AGENTMAIL_API_KEY: z.string().min(1).optional(),
     EMOJI_PROXY_TOKEN: z.string().min(1).optional(),
   },
   runtimeEnv: process.env,

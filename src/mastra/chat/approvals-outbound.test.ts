@@ -3,16 +3,23 @@ import type { Approval } from '../types';
 
 const realUtils = { ...(await import('../tools/slack/utils')) };
 const realAudit = { ...(await import('../db/queries/audit')) };
+const realQueries = { ...(await import('../db/queries/approvals')) };
+const realInstance = { ...(await import('./instance')) };
 
 const sends: unknown[] = [];
 const audits: unknown[] = [];
+const ownerDms: unknown[] = [];
 let failSend = false;
 
 mock.module('../tools/slack/utils', () => ({
   ...realUtils,
   sendMessage: (message: unknown) => {
     if (failSend) {
-      return Promise.reject(new Error('channel_not_found'));
+      return Promise.reject(
+        Object.assign(new Error('An API error occurred: channel_not_found'), {
+          data: { error: 'channel_not_found' },
+        })
+      );
     }
     sends.push(message);
     return Promise.resolve({ messageId: '1', threadId: undefined });
@@ -26,16 +33,36 @@ mock.module('../db/queries/audit', () => ({
   },
 }));
 
-const { applyDecision } = await import('./approvals');
+mock.module('../db/queries/approvals', () => ({
+  ...realQueries,
+  setApprovalCard: () => Promise.resolve(),
+}));
+mock.module('./instance', () => ({
+  ...realInstance,
+  chat: () => ({
+    openDM: () =>
+      Promise.resolve({
+        post: (message: unknown) => {
+          ownerDms.push(message);
+          return Promise.resolve({ id: '1', threadId: 'slack:D222:' });
+        },
+      }),
+  }),
+}));
+
+const { applyDecision, postApprovalCard } = await import('./approvals');
 
 afterAll(() => {
   mock.module('../tools/slack/utils', () => realUtils);
   mock.module('../db/queries/audit', () => realAudit);
+  mock.module('../db/queries/approvals', () => realQueries);
+  mock.module('./instance', () => realInstance);
 });
 
 beforeEach(() => {
   sends.length = 0;
   audits.length = 0;
+  ownerDms.length = 0;
   failSend = false;
 });
 
@@ -82,8 +109,22 @@ test('a declined message is never sent', async () => {
   expect(audits).toHaveLength(0);
 });
 
-test('a failed send is not audited as a post', async () => {
+test('a failed send is not audited as a post and the owner is told why', async () => {
   failSend = true;
   await applyDecision(outbound('approved'));
   expect(audits).toHaveLength(0);
+  expect(ownerDms).toEqual([
+    "couldn't send that approved message to <@UOTHER>: channel_not_found",
+  ]);
+});
+
+test('the card names the target as a live mention, then the escaped text', async () => {
+  await postApprovalCard({
+    approval: outbound('pending'),
+    text: 'lunch? <!channel>',
+  });
+  const card = JSON.stringify(ownerDms);
+  expect(card).toContain('to <@UOTHER>');
+  expect(card).toContain('lunch? &lt;!channel&gt;');
+  expect(card).not.toContain('from <@UOWNER>');
 });

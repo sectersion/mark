@@ -5,11 +5,12 @@ import { channelContext } from '../../lib/context';
 import { rawId } from '../../lib/ids';
 import { input, output } from '../../types/tools/index';
 import { isDirectTarget } from '../slack/utils';
+import { assertNoThirdPartyMentions } from './utils';
 
 export const createCanvasTool = createTool({
   id: 'create_canvas',
   description:
-    "Create either a standalone Slack canvas or the Canvas tab for a channel. A channel canvas defaults to the current channel and fails if that channel already has one. A standalone canvas can optionally be shared with a channel. Sharing into any channel other than the owner's own DM is refused. Canvas markdown uses ![](@USER_ID) for user mentions and ![](#CHANNEL_ID) for channel mentions. Regular Slack message syntax such as <@U123> and <#C123> renders as literal text in a canvas.",
+    "Create either a standalone Slack canvas or the Canvas tab for a channel. A channel canvas defaults to the current channel and fails if that channel already has one. A standalone canvas can optionally be shared with a channel. Sharing into any channel other than the owner's own DM is refused. Do not mention people in canvas markdown: a mention notifies them, so one of anyone but the owner is refused.",
   inputSchema: input({
     mode: z.enum(['standalone', 'channel']).default('standalone'),
     title: z.string().min(1).optional(),
@@ -24,7 +25,7 @@ export const createCanvasTool = createTool({
       .min(1)
       .optional()
       .describe(
-        'Initial canvas content as Markdown. For a user mention, write ![](@U123ABC). For a channel mention, write ![](#C123ABC). Do not write <@U123ABC> or <#C123ABC>; message mention syntax renders as literal text in canvases.'
+        'Initial canvas content as Markdown, with no mentions of people.'
       ),
   }),
   outputSchema: output({
@@ -40,6 +41,9 @@ export const createCanvasTool = createTool({
     },
   },
   execute: async ({ mode, title, channelId, markdown }, context) => {
+    if (markdown) {
+      assertNoThirdPartyMentions(markdown);
+    }
     const ctx = channelContext(context?.requestContext);
     const targetChannelId =
       mode === 'channel' ? (channelId ?? ctx.channelId) : channelId;

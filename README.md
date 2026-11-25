@@ -143,7 +143,6 @@ local database named `gorkie`. Mastra creates its tables on first run.
 | `GITHUB_APP_CLIENT_ID` | yes | GitHub App client id, for the App Home sign-in (see [docs/github-app.md](./docs/github-app.md)) |
 | `GITHUB_APP_CLIENT_SECRET` | yes | GitHub App client secret, used to refresh expiring user tokens |
 | `EXA_API_KEY` | yes | Exa key, powers `search_web`/`fetch_url` |
-| `AGENTMAIL_API_KEY` | no | Lets the sandbox reach the AgentMail API without the key entering the sandbox |
 
 See [`.env.example`](./.env.example) for the full annotated list.
 

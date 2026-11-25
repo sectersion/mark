@@ -11,7 +11,7 @@ import { logger } from '../../lib/logger';
 import { isOwner } from '../../lib/owner';
 import type { ChannelContext, Target } from '../../types';
 
-const slackErrorSchema = z.looseObject({
+export const slackErrorSchema = z.looseObject({
   data: z.looseObject({ error: z.string().optional() }).optional(),
 });
 const notReadable =
@@ -141,6 +141,18 @@ export async function isDirectTarget({
     currentThreadId: ctx.threadId,
     ownerDmChannelId: ownerDmId,
   });
+}
+
+// Safe to send unescaped only because targetSchema limits ids to bare Slack ids.
+export function renderTarget(target: Target): string {
+  if (target.type === 'user') {
+    return `<@${rawId(target.id)}>`;
+  }
+  const { ts } = parseSlackId(target.id);
+  if (target.type === 'thread' && ts) {
+    return `a thread in <#${rawId(target.id)}> (ts ${ts})`;
+  }
+  return `<#${rawId(target.id)}>`;
 }
 
 const markdownConverter = new SlackFormatConverter();

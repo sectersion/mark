@@ -50,10 +50,7 @@ Errors: channel_not_found usually means the bot isn't a member of that private c
         requesterId: ctx.userId,
         ttlMs: approval.ttl,
       });
-      await postApprovalCard({
-        approval: created,
-        text: `to ${target.type} ${target.id}:\n${message}`,
-      });
+      await postApprovalCard({ approval: created, text: message });
       return { result: "waiting on the owner's approval" };
     }
     try {
