@@ -42,7 +42,7 @@ export const passToOwnerTool = createTool({
       replyThread: threadId,
       ttlMs: approval.ttl,
     });
-    await postApprovalCard({ approval: created, text: summary });
+    await postApprovalCard({ approval: created });
     return { result: 'passed along' };
   },
 });

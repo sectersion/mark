@@ -1,5 +1,13 @@
 import { expect, test } from 'bun:test';
-import { isOwner, isTainted } from './owner';
+import { isOwner, isOwnerActor, isTainted } from './owner';
+
+test('isOwnerActor passes only the owner as a person', () => {
+  expect(isOwnerActor({ userId: 'UOWNER', isBot: false })).toBe(true);
+  expect(isOwnerActor({ userId: 'UOTHER', isBot: false })).toBe(false);
+  expect(isOwnerActor({ userId: 'UOWNER', isBot: true })).toBe(false);
+  expect(isOwnerActor({ userId: 'B0APP', isBot: true })).toBe(false);
+  expect(isOwnerActor(undefined)).toBe(false);
+});
 
 test('isOwner matches only the configured id', () => {
   expect(isOwner('UOWNER')).toBe(true);

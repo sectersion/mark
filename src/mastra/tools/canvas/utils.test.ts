@@ -76,8 +76,19 @@ test.each([
   ['an owner token run into another', '![](@UOWNER@UOTHER)'],
   ['an owner id with extra characters', '![](@UOWNERX)'],
   ['a bare token in prose', 'cc @UOTHER on this'],
+  ['a zero-width space inside the id', '![][x]\n\n[x]: @U\u200bOTHER'],
+  ['a soft hyphen inside the id', 'cc @U\u00adOTHER'],
+  ['an encoded zero-width space', 'cc @U&#x200b;OTHER'],
 ])('a non-owner mention written as %s is refused', (_, markdown) => {
   expect(() => assertNoThirdPartyMentions(markdown)).toThrow(refused);
+});
+
+test('a deeply nested encoding is refused quickly', () => {
+  const started = performance.now();
+  expect(() =>
+    assertNoThirdPartyMentions(`%${'25'.repeat(100_000)}40UOTHER`)
+  ).toThrow('too many layers deep');
+  expect(performance.now() - started).toBeLessThan(1000);
 });
 
 test('a plain email address is allowed', () => {

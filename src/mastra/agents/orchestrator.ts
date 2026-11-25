@@ -8,6 +8,7 @@ import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 import { slack } from '../chat/client';
 import {
+  onAction,
   onDirectMessage,
   onMention,
   onSubscribedMessage,
@@ -257,6 +258,7 @@ const orchestrator = new Agent({
       onMention,
       onSubscribedMessage,
       onDirectMessage,
+      onAction,
       // The default slash-command handler runs mark for any user, bypassing the router.
       onSlashCommand: false,
     },

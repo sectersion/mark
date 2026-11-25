@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { stripInvisible } from '../../lib/invisible';
 import { isOwner } from '../../lib/owner';
 
 export const canvasIdSchema = z
@@ -25,14 +26,20 @@ function decodeCodePoint({
 // way to write `@` (NFKC, entities, backslash escapes, percent-encoding, any
 // depth) and then judges every `@<user id>` token anywhere in the text, plus
 // every mention-shaped `@` (link destination or `<@`), whatever follows it.
-// Over-blocking is the accepted cost.
+// Over-blocking is the accepted cost. Invisible characters are stripped too,
+// so `@U<zero-width space>OTHER` cannot slip past the token scan, and the
+// decode depth is capped because each `%25` layer costs a full pass.
 export function assertNoThirdPartyMentions(markdown: string): void {
   let text = markdown;
   let previous: string | undefined;
-  while (text !== previous) {
+  for (let pass = 0; text !== previous; pass++) {
+    if (pass === 8) {
+      throw new Error(
+        'Canvas markdown is encoded too many layers deep to check for mentions. Write it without nested encoding.'
+      );
+    }
     previous = text;
-    text = text
-      .normalize('NFKC')
+    text = stripInvisible(text.normalize('NFKC'))
       .replace(/&#x0*([0-9a-f]+);/gi, (match, hex: string) =>
         decodeCodePoint({ match, code: Number.parseInt(hex, 16) })
       )

@@ -1,7 +1,7 @@
-import type { Message, Thread } from 'chat';
+import type { Author, Message, Thread } from 'chat';
 import { writeAudit } from '../db/queries/audit';
 import { logger } from '../lib/logger';
-import { isOwner } from '../lib/owner';
+import { isOwner, isOwnerActor } from '../lib/owner';
 import { isPaused } from '../lib/pause';
 import { routeMessage } from '../lib/route';
 import type { CommandThread } from '../types';
@@ -134,6 +134,17 @@ export async function onSubscribedMessage<T extends RoutedThread>(
     return;
   }
   await respond({ defaultHandler, message, thread });
+}
+
+// Mastra's built-in tool approval buttons resume the run as whoever pressed
+// them, so only the owner's presses reach the default handler.
+export async function onAction(
+  event: { user: Pick<Author, 'userId' | 'isBot'> | undefined },
+  defaultHandler: () => Promise<void>
+): Promise<void> {
+  if (isOwnerActor(event.user)) {
+    await defaultHandler();
+  }
 }
 
 export async function onDirectMessage<T extends RoutedThread>(

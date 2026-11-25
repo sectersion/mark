@@ -22,7 +22,7 @@ export const proposeRuleTool = createTool({
       payload: { rule },
       ttlMs: approval.ruleTtl,
     });
-    await postApprovalCard({ approval: created, text: rule });
+    await postApprovalCard({ approval: created });
     return {
       result: 'sent to the owner for approval, not in effect until approved',
     };

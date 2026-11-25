@@ -1,15 +1,27 @@
 import { z } from 'zod';
+import { stripInvisible } from '../lib/invisible';
 import { targetSchema } from './target';
+
+// Stripped before it is stored, so the stored text is exactly what the
+// approval card shows. Text that was only invisible characters is rejected.
+function visibleText(max: number) {
+  return z
+    .string()
+    .min(1)
+    .max(max)
+    .transform(stripInvisible)
+    .pipe(z.string().min(1));
+}
 
 export const approvalPayloadSchemas = {
   request: z.object({
-    summary: z.string().min(1).max(500),
+    summary: visibleText(500),
     wantsReply: z.boolean(),
   }),
-  standing_rule: z.object({ rule: z.string().min(1).max(300) }),
+  standing_rule: z.object({ rule: visibleText(300) }),
   outbound_message: z.object({
     target: targetSchema,
-    text: z.string().min(1).max(2800),
+    text: visibleText(2800),
   }),
 };
 

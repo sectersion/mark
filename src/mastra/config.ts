@@ -73,4 +73,5 @@ export const dailyCaps = {
 
 // Mastra binds every interface when no host is set (@mastra/deployer
 // server/index.js `hostname: bindHost`), and its agent routes have no auth.
-export const server = { host: '127.0.0.1' };
+// The port is pinned so the loopback Host and Origin allowlist matches it.
+export const server = { host: '127.0.0.1', port: 4111 };

@@ -17,34 +17,67 @@ code runs in E2B, never on the host.
 
 ## Security: the HTTP server
 
-Mastra registers every agent on its HTTP server (`/api/agents/<id>/generate`),
-and the caller supplies the request context. `src/mastra/index.ts` configures no
+Mastra registers every agent on its HTTP server (`/api/agents/<id>/generate`,
+`/api/agents/<id>/tools/<toolId>/execute`, `/api/memory/threads/...`), and the
+caller supplies the request context. `src/mastra/index.ts` configures no
 `server.auth`, so anyone who can reach the port can forge `channel` context and
-talk to the privileged agent as if they were the owner.
+talk to the privileged agent as if they were the owner, or read the owner's
+conversation history and working memory.
 
-**In force: the server is bound to loopback in code, and a firewall rule is
-still required as a second layer.**
+**Loopback alone is not enough.** Binding to `127.0.0.1` removes the network
+path, but the owner's own browser is on the same machine. Mastra's default CORS
+is `origin: "*"` (`@mastra/deployer/dist/server/index.js`, `getCorsConfig`), so
+any web page the owner opens could call the API, and a page can also rebind its
+own hostname to `127.0.0.1` (DNS rebinding) and then read the answers as if it
+were same-origin.
 
-- Code: `src/mastra/config.ts` exports `server = { host: '127.0.0.1' }`, passed to
-  `new Mastra({ server })` in `src/mastra/index.ts`.
-- Why it must be explicit: `@mastra/deployer/dist/server/index.js` line 4710
-  reads `bindHost = serverOptions?.host ?? process.env.MASTRA_HOST`, and line 4720
-  passes it as `hostname: bindHost` to `serve`, which calls
-  `server.listen(port, hostname)` (line 1164). With neither set, `hostname` is
-  `undefined` and Node listens on **all interfaces**. The `"localhost"` default on
-  line 4711 and in `@mastra/core/dist/server/types.d.ts` (`host`, default
-  `'localhost'`) is only the string used in log lines. Setting `host` fixes that.
+**In force, in code (`src/mastra/index.ts`, `src/mastra/lib/loopback.ts`):**
+
+- Bind: `src/mastra/config.ts` exports `server = { host: '127.0.0.1', port: 4111 }`.
+  The port is pinned so the allowlist below matches it (`PORT` no longer moves it).
+- CORS: `server.cors.origin` is `http://127.0.0.1:4111` and
+  `http://localhost:4111` only, never `*`.
+- Middleware (`server.middleware`, run by the deployer on every route registered
+  after it, which is all agent, memory, tool, workflow and Studio routes) rejects
+  with 403:
+  - any request whose `Host` is not exactly `127.0.0.1:4111` or `localhost:4111`
+    (this is what stops DNS rebinding: the rebound page sends its own hostname);
+  - any request carrying an `Origin` that is not one of those two;
+  - in production (`NODE_ENV=production`), every `/api` request. Nothing
+    legitimate needs the API there: Slack arrives over Socket Mode. A liveness
+    probe should hit `/health`, which stays open; `mastra api` against a
+    production process gets 403.
+  Studio keeps working in development when opened at `http://localhost:4111` or
+  `http://127.0.0.1:4111`.
+- Not covered by the middleware: `/health`, Mastra's auth endpoints (public by
+  design, inert with no `server.auth`) and the browser-stream routes, which the
+  deployer registers before user middleware; mark configures no browser, so they
+  have nothing to serve.
+
+**Do not run mark on a machine you also browse the web on** unless you have
+checked this middleware is in force after the deploy (the checks below). The
+homelab VM is the intended host.
+
+- Why the bind must be explicit: `@mastra/deployer/dist/server/index.js`
+  `createNodeServer` reads `bindHost = serverOptions?.host ?? process.env.MASTRA_HOST`
+  and passes it as `hostname: bindHost` to `serve`. With neither set, Node
+  listens on **all interfaces**; the `"localhost"` default is only the string
+  used in log lines.
 - `MASTRA_HOST` in the environment is the fallback only when `server.host` is
   unset; do not set it to `0.0.0.0`.
 - Firewall (REQUIRED, belt and braces): deny inbound to port 4111 and every other
   port except SSH from the LAN. Docker users: publish nothing
   (`ports:` empty), or `127.0.0.1:4111:4111` only.
-- Not done: `server.auth` or a reject-all middleware. Loopback binding already
-  removes the network path; add auth before anything ever exposes the port
-  (reverse proxy, Studio, remote tooling).
-- Check after each deploy: `ss -ltn | grep 4111` must show `127.0.0.1:4111`, not
-  `0.0.0.0` or `*`; and `curl http://<lan-ip>:4111/api/agents` from another
-  machine must fail to connect.
+- Not done: `server.auth`. Add it before anything ever exposes the port
+  (reverse proxy, remote tooling).
+- Check after each deploy:
+  - `ss -ltn | grep 4111` must show `127.0.0.1:4111`, not `0.0.0.0` or `*`;
+  - `curl http://<lan-ip>:4111/api/agents` from another machine must fail to
+    connect;
+  - on the host, `curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.com:4111' http://127.0.0.1:4111/api/agents`
+    and the same with `-H 'Origin: https://evil.com'` must both print `403`;
+  - in production, `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4111/api/agents`
+    must print `403`.
 
 ## Daily caps
 

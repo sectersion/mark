@@ -80,12 +80,23 @@ export function expiredByPress(
   return outcome.result === 'expired' ? outcome.approval : undefined;
 }
 
+function shownText(approval: Approval): string {
+  switch (approval.kind) {
+    case 'request':
+      return approval.payload.summary;
+    case 'standing_rule':
+      return approval.payload.rule;
+    default:
+      return approval.payload.text;
+  }
+}
+
+// The card shows the stored payload, never the caller's copy, so the owner
+// approves exactly the text that is kept and acted on.
 export async function postApprovalCard({
   approval,
-  text,
 }: {
   approval: Approval;
-  text: string;
 }): Promise<void> {
   const dm = await chat().openDM(env.OWNER_SLACK_USER_ID);
   const sent = await dm.post(
@@ -95,7 +106,7 @@ export async function postApprovalCard({
         ...(approval.kind === 'outbound_message'
           ? [CardText(`to ${renderTarget(approval.payload.target)}`)]
           : []),
-        CardText(escapeMrkdwn(text)),
+        CardText(escapeMrkdwn(shownText(approval))),
         ...(approval.requesterId && approval.kind !== 'outbound_message'
           ? [CardText(`from <@${approval.requesterId}>`, { style: 'muted' })]
           : []),

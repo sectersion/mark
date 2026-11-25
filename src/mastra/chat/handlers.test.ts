@@ -53,9 +53,8 @@ mock.module('./commands', () => ({
   },
 }));
 
-const { onDirectMessage, onMention, onSubscribedMessage } = await import(
-  './handlers'
-);
+const { onAction, onDirectMessage, onMention, onSubscribedMessage } =
+  await import('./handlers');
 
 afterAll(() => {
   mock.module('./receptionist', () => realReceptionist);
@@ -271,4 +270,22 @@ test('an exceeded cap never blocks the owner', async () => {
   });
   await onMention(thread, current, defaultHandler);
   expect(turns).toHaveLength(1);
+});
+
+test('only the owner can press a built-in tool approval button', async () => {
+  let pressed = 0;
+  const press = () => {
+    pressed++;
+    return Promise.resolve();
+  };
+  const user = (userId: string, isBot = false) => ({
+    user: { userId, userName: userId, fullName: userId, isBot, isMe: false },
+  });
+  await onAction(user('UOTHER'), press);
+  await onAction(user('UOWNER', true), press);
+  await onAction(user('B0APP', true), press);
+  await onAction({ user: undefined }, press);
+  expect(pressed).toBe(0);
+  await onAction(user('UOWNER'), press);
+  expect(pressed).toBe(1);
 });
