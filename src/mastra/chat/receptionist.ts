@@ -6,6 +6,9 @@ import { logger } from '../lib/logger';
 import { allowReceptionist } from '../lib/rate-limit';
 import { passToOwnerTurnKey } from '../tools/receptionist/pass-to-owner';
 
+export const failureLine =
+  'sorry, something went wrong on my end. try again in a bit';
+
 type TurnMessage = Pick<Message, 'id' | 'text'> & {
   author: Pick<Author, 'userId' | 'userName' | 'fullName' | 'isMe'>;
 };
@@ -52,7 +55,7 @@ export async function receptionistTurn({
   });
   requestContext.set(passToOwnerTurnKey, { passed: false });
 
-  let text = 'sorry, something went wrong on my end. try again in a bit';
+  let text = failureLine;
   let toolNames: string[] = [];
   try {
     const result = await receptionist.generate(input, { requestContext });

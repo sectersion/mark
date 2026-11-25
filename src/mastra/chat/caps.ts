@@ -2,7 +2,6 @@ import { env } from '@/env';
 import { countAuditByAction, writeAudit } from '../db/queries/audit';
 import { capDecision, startOfLocalDay } from '../lib/caps';
 import { logger } from '../lib/logger';
-import { isPaused, setPaused } from '../lib/pause';
 import { chat } from './instance';
 
 const labels = {
@@ -13,9 +12,12 @@ const labels = {
 export async function enforceDailyCaps(): Promise<boolean> {
   try {
     const counts = await countAuditByAction({
-      actions: ['turn', 'receptionist.reply'],
+      actions: ['turn', 'receptionist.reply', 'cap.exceeded'],
       since: startOfLocalDay({ now: new Date() }),
     });
+    if ((counts.get('cap.exceeded') ?? 0) > 0) {
+      return true;
+    }
     const decision = capDecision({
       counts: {
         ownerTurns: counts.get('turn') ?? 0,
@@ -25,10 +27,6 @@ export async function enforceDailyCaps(): Promise<boolean> {
     if (decision.status === 'ok') {
       return false;
     }
-    if (await isPaused()) {
-      return true;
-    }
-    await setPaused({ paused: true, byId: env.OWNER_SLACK_USER_ID });
     await writeAudit({
       actor: 'system',
       action: 'cap.exceeded',
@@ -42,7 +40,7 @@ export async function enforceDailyCaps(): Promise<boolean> {
       .openDM(env.OWNER_SLACK_USER_ID)
       .then((dm) =>
         dm.post(
-          `paused: hit the daily cap on ${labels[decision.cap]} (${decision.count} of ${decision.limit}). resume when you want me back, but the cap still applies until local midnight.`
+          `hit the daily cap on ${labels[decision.cap]} (${decision.count} of ${decision.limit}). strangers get "mark is offline" until midnight Chicago time; you are not blocked.`
         )
       )
       .catch((error: unknown) =>

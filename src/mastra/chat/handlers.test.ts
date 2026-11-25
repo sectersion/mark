@@ -262,3 +262,13 @@ test('an exceeded cap takes strangers offline and audits no turn', async () => {
   expect(receptionistCalls).toEqual([]);
   expect(audits).toEqual([]);
 });
+
+test('an exceeded cap never blocks the owner', async () => {
+  capsExceeded = true;
+  const current = message({ id: 'm11', userId: 'UOWNER' });
+  const { thread, defaultHandler, turns } = fakeThread({
+    newestFirst: [current],
+  });
+  await onMention(thread, current, defaultHandler);
+  expect(turns).toHaveLength(1);
+});

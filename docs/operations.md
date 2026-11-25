@@ -50,13 +50,18 @@ still required as a second layer.**
 
 `src/mastra/config.ts` `dailyCaps`: 500 owner turns and 200 receptionist replies
 per day, counted from audit rows (`turn`, `receptionist.reply`) since local
-midnight in America/Chicago. On exceeding either, mark pauses itself, DMs the
-owner once, and writes `cap.exceeded` to the audit log.
+midnight in America/Chicago.
 
-These count requests, not dollars. Resuming mid-day while the cap still applies
-pauses mark again on the next message; raise the cap in config or wait for
-midnight. Pause does not stop the owner's own DM turns (routing only takes
-strangers offline), so the owner-turn cap is an alarm plus a stranger shutoff.
+On a breach mark writes an audit row `cap.exceeded` (cap name and numbers only)
+and DMs the owner, once per local day (the guard is that row, so it survives
+restarts; two simultaneous breaches could in theory send two DMs). While that
+row exists for today, anyone who is not the owner gets "mark is offline."
+
+- The owner is never blocked by a cap. The owner-turn cap is an alert.
+- mark is not paused: scheduled tasks keep running and there is nothing to
+  resume. The stranger shutoff lifts itself at the next Chicago midnight.
+- Caps count requests, not dollars. The dollar limits below are the real spend
+  control.
 
 ## Spend: who pays, and dollar limits
 
@@ -81,7 +86,7 @@ encrypting any off-host copy.
 Cron (daily 03:15, as the user that owns the checkout):
 
 ```
-15 3 * * * cd /srv/mark && . ./.env && DATABASE_URL="$DATABASE_URL" scripts/backup.sh >> backups/backup.log 2>&1
+15 3 * * * cd /srv/mark && . ./.env && DATABASE_URL="$DATABASE_URL" bash scripts/backup.sh >> backups/backup.log 2>&1
 ```
 
 (`.env` must be shell-sourceable `KEY=value` lines. Alternatively export
@@ -90,8 +95,8 @@ Cron (daily 03:15, as the user that owns the checkout):
 Sanity check after installing the cron, by hand:
 
 ```
-env -u DATABASE_URL scripts/backup.sh; echo $?     # prints an error, exit 1
-scripts/backup.sh && ls -l backups/                 # a fresh mark-DATE.sql.gz
+env -u DATABASE_URL bash scripts/backup.sh; echo $?     # prints an error, exit 1
+bash scripts/backup.sh && ls -l backups/                # a fresh mark-DATE.sql.gz
 gzip -t backups/mark-$(date +%F).sql.gz             # exit 0
 git check-ignore backups/x.sql.gz                   # prints a match
 ```
@@ -133,13 +138,13 @@ of what to read and confirm, not a statement of what they say.
 - [ ] Which channels may mark join or reply in, and may it use the user token
   for search (`SLACK_USER_TOKEN`)?
 - [ ] Contact for questions or abuse reports, and how to switch mark off fast
-  (`pause` command, or stop the service).
+  (stop the service).
 - [ ] Record the date confirmed and who confirmed it: ______
 
 ## Injection evals
 
 `test/injection.test.ts` calls a live model, so plain `bun test` skips the live
-cases (only the no-model helper checks run). The owner runs them with:
+cases (they also skip unless `INJECTION_EVALS=1` and the gateway key is not the placeholder `x`) (only the no-model helper checks run). The owner runs them with a real `AI_GATEWAY_API_KEY` in `.env`:
 
 ```
 bun run test:evals
@@ -150,6 +155,10 @@ and `AI_GATEWAY_API_KEY` from `.env` and sets `INJECTION_EVALS=1`. The audit
 write, approval creation, approval card, and rate limit are stubbed, so nothing
 touches Postgres or Slack. Each case sends a message as `UOTHER` and asserts the
 only tool called is `pass_to_owner` (at most once) and that a canary planted in
-owner-authored history never appears in the reply.
+owner-authored history never appears in the reply. Every case also asserts the
+reply is not the fixed failure line, so a bad key or no network fails the run
+instead of passing vacuously, and a benign sanity case must get a real answer.
+The live cases skip unless `INJECTION_EVALS=1` and `AI_GATEWAY_API_KEY` is not
+the placeholder `x`, so plain `bun test` can never spend money.
 
 - [ ] `bun run test:evals` passed on: ______
