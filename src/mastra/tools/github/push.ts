@@ -90,7 +90,7 @@ export const pushTool = ({
         sandbox,
         userId,
       });
-      await auditSend({ kind: 'github_push', repository, branch });
+      await auditSend({ detail: { kind: 'github_push', repository, branch } });
       return pushed;
     },
   });

@@ -90,7 +90,7 @@ export const uploadEmojiTool = createTool({
       );
     }
 
-    await auditSend({ kind: 'emoji', name, aliasFor });
+    await auditSend({ detail: { kind: 'emoji', name, aliasFor } });
     return { name };
   },
 });

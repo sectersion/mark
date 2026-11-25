@@ -4,6 +4,7 @@ import { githubAccess, githubAccessToken } from '../../lib/github';
 import { logger } from '../../lib/logger';
 import { asksBefore } from '../../types';
 import { ALLOWLIST, isWriteTool } from './allowlist';
+import { auditIfWrite } from './audit';
 import { checkoutTool } from './checkout';
 import { handoff } from './handoff';
 import { pushTool } from './push';
@@ -66,7 +67,7 @@ export async function githubTools({
         continue;
       }
       tools[id] = {
-        ...tool,
+        ...auditIfWrite({ name, tool }),
         needsApproval: asksBefore({
           kind: isWriteTool(name) ? 'write' : 'read',
           level,

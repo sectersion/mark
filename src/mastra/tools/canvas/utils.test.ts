@@ -1,10 +1,47 @@
-import { afterEach, expect, spyOn, test } from 'bun:test';
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from 'bun:test';
 import { RequestContext } from '@mastra/core/request-context';
 import { noopObserve } from '@mastra/core/tools';
 import { slack } from '../../chat/client';
-import { createCanvasTool } from './create';
-import { editCanvasTool } from './edit';
-import { assertNoThirdPartyMentions } from './utils';
+
+const realAudit = await import('../../db/queries/audit');
+const realExports = { ...realAudit };
+const written: {
+  actor: string;
+  action: string;
+  detail?: Record<string, unknown>;
+}[] = [];
+
+mock.module('../../db/queries/audit', () => ({
+  ...realExports,
+  writeAudit: (row: {
+    actor: string;
+    action: string;
+    detail?: Record<string, unknown>;
+  }) => {
+    written.push(row);
+    return Promise.resolve();
+  },
+}));
+
+const { createCanvasTool } = await import('./create');
+const { editCanvasTool } = await import('./edit');
+const { assertNoThirdPartyMentions } = await import('./utils');
+
+afterAll(() => {
+  mock.module('../../db/queries/audit', () => realExports);
+});
+
+beforeEach(() => {
+  written.length = 0;
+});
 
 const refused = 'cannot mention anyone but the owner';
 
@@ -108,6 +145,13 @@ test('create_canvas refuses a non-owner mention before calling Slack', async () 
     context()
   );
   expect(create).toHaveBeenCalledTimes(1);
+  expect(written).toEqual([
+    {
+      actor: 'mark',
+      action: 'post',
+      detail: { kind: 'canvas_create', mode: 'standalone', canvasId: 'F0123' },
+    },
+  ]);
 });
 
 test('edit_canvas refuses a non-owner mention before calling Slack', async () => {

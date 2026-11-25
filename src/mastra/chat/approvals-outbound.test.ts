@@ -9,6 +9,7 @@ const realInstance = { ...(await import('./instance')) };
 const sends: unknown[] = [];
 const audits: unknown[] = [];
 const ownerDms: unknown[] = [];
+const threadPosts: unknown[] = [];
 let failSend = false;
 
 mock.module('../tools/slack/utils', () => ({
@@ -40,6 +41,12 @@ mock.module('../db/queries/approvals', () => ({
 mock.module('./instance', () => ({
   ...realInstance,
   chat: () => ({
+    thread: (id: string) => ({
+      post: (text: string) => {
+        threadPosts.push({ id, text });
+        return Promise.resolve();
+      },
+    }),
     openDM: () =>
       Promise.resolve({
         post: (message: unknown) => {
@@ -63,6 +70,7 @@ beforeEach(() => {
   sends.length = 0;
   audits.length = 0;
   ownerDms.length = 0;
+  threadPosts.length = 0;
   failSend = false;
 });
 
@@ -127,4 +135,21 @@ test('the card names the target as a live mention, then the escaped text', async
   expect(card).toContain('to <@UOTHER>');
   expect(card).toContain('lunch? &lt;!channel&gt;');
   expect(card).not.toContain('from <@UOWNER>');
+});
+
+test('telling a requester the decision is audited without the reply text', async () => {
+  await applyDecision({
+    ...outbound('approved'),
+    kind: 'request',
+    payload: { summary: 'can we move the call', wantsReply: true },
+    replyThread: 'slack:D9:',
+  });
+  expect(threadPosts).toEqual([{ id: 'slack:D9:', text: 'they said yes' }]);
+  expect(audits).toEqual([
+    {
+      actor: 'mark',
+      action: 'post',
+      detail: { kind: 'requester_notice', replyThread: 'slack:D9:' },
+    },
+  ]);
 });

@@ -83,7 +83,7 @@ export const reactTool = createTool({
     };
     if (action === 'remove') {
       await slack.webClient.reactions.remove(request);
-      await auditSend({ kind: 'reaction', action, ...request });
+      await auditSend({ detail: { kind: 'reaction', action, ...request } });
       return {
         action,
         channelId: chatChannelId(target.channel),
@@ -93,7 +93,7 @@ export const reactTool = createTool({
     }
 
     await slack.webClient.reactions.add(request);
-    await auditSend({ kind: 'reaction', action, ...request });
+    await auditSend({ detail: { kind: 'reaction', action, ...request } });
     return {
       action,
       channelId: chatChannelId(target.channel),

@@ -7,6 +7,7 @@ import {
   setApprovalCard,
 } from '../db/queries/approvals';
 import { writeAudit } from '../db/queries/audit';
+import { auditSend } from '../lib/audit-send';
 import { logger } from '../lib/logger';
 import {
   renderTarget,
@@ -261,6 +262,9 @@ async function tellRequester({
   await chat()
     .thread(replyThread)
     .post(text)
+    .then(() =>
+      auditSend({ detail: { kind: 'requester_notice', replyThread } })
+    )
     .catch((error: unknown) =>
       logger.warn('[approvals] could not tell the requester', {
         error,

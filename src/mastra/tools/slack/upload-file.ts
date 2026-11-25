@@ -150,7 +150,7 @@ export const uploadFileTool = createTool({
       thread_ts: destination.threadTs,
     });
     const fileId = created.file_id;
-    await auditSend({ kind: 'file', target: resolved, fileId });
+    await auditSend({ detail: { kind: 'file', target: resolved, fileId } });
 
     return {
       filename: name,

@@ -73,10 +73,12 @@ export const createCanvasTool = createTool({
         throw new Error('Slack created the canvas without returning its id.');
       }
       await auditSend({
-        kind: 'canvas_create',
-        mode,
-        canvasId: response.canvas_id,
-        channelId,
+        detail: {
+          kind: 'canvas_create',
+          mode,
+          canvasId: response.canvas_id,
+          channelId,
+        },
       });
       return {
         mode,
@@ -102,10 +104,12 @@ export const createCanvasTool = createTool({
         );
       }
       await auditSend({
-        kind: 'canvas_create',
-        mode,
-        canvasId: response.canvas_id,
-        channelId: targetChannelId,
+        detail: {
+          kind: 'canvas_create',
+          mode,
+          canvasId: response.canvas_id,
+          channelId: targetChannelId,
+        },
       });
       return {
         mode,

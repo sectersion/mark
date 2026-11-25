@@ -56,7 +56,9 @@ Errors: channel_not_found usually means the bot isn't a member of that private c
     }
     try {
       const sent = await sendMessage({ target, markdown: message, ctx });
-      await auditSend({ kind: 'message', target, messageId: sent.messageId });
+      await auditSend({
+        detail: { kind: 'message', target, messageId: sent.messageId },
+      });
       return { result: 'sent', ...sent };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);

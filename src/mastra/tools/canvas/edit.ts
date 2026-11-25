@@ -108,7 +108,7 @@ export const editCanvasTool = createTool({
       }
       throw error;
     }
-    await auditSend({ kind: 'canvas_edit', canvasId });
+    await auditSend({ detail: { kind: 'canvas_edit', canvasId } });
     return { canvasId };
   },
 });
