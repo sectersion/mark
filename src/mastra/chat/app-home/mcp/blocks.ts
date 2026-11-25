@@ -28,7 +28,7 @@ export function mcpServersBlocks(
           elements: [
             {
               type: 'mrkdwn',
-              text: 'none yet. add one to give gorkie extra tools, just for you.',
+              text: 'none yet. add one to give mark extra tools, just for you.',
             },
           ],
         },

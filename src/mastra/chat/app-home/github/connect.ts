@@ -177,7 +177,7 @@ async function switchMethod({
         method,
         warning: pending
           ? undefined
-          : 'Gorkie restarted, so this code is stale. Press Cancel and start again, or paste a token below.',
+          : 'mark restarted, so this code is stale. Press Cancel and start again, or paste a token below.',
       }),
     });
   } catch (error) {

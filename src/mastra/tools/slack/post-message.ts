@@ -16,7 +16,7 @@ Never use this to answer the current conversation, and never for status or progr
 
 Anything other than the current thread or the owner's own DM is not sent yet: it goes to the owner as an approval card and is posted exactly as written only if they approve. Tell the owner it is waiting on their approval; do not claim it was sent.
 
-Every post automatically uses the requester's Slack avatar and labels the sender as "Name [gorkie]". Do not add that attribution yourself in the message text; there is no way to override or customize it.
+Every post automatically uses the requester's Slack avatar and labels the sender as "Name [mark]". Do not add that attribution yourself in the message text; there is no way to override or customize it.
 
 Errors: channel_not_found usually means the bot isn't a member of that private channel; not_in_channel means it hasn't joined yet. Either way, tell the user to invite the bot there.`,
   inputSchema: input({

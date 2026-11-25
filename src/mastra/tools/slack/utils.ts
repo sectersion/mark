@@ -164,7 +164,7 @@ async function botDisplayName(botUserId: string | undefined): Promise<string> {
     return cachedBotName;
   }
   if (!botUserId) {
-    return 'gorkie';
+    return 'mark';
   }
   const info = await slack.webClient.users
     .info({ user: botUserId })
@@ -172,7 +172,7 @@ async function botDisplayName(botUserId: string | undefined): Promise<string> {
   const profile = info?.user?.profile;
   const name = profile?.display_name || profile?.real_name || info?.user?.name;
   if (!name) {
-    return 'gorkie';
+    return 'mark';
   }
   cachedBotName = name;
   return name;

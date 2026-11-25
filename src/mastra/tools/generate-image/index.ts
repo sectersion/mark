@@ -74,10 +74,7 @@ export const generateImageTool = createTool({
     const paths = await Promise.all(
       generated.map(async ({ data, mediaType }, index) => {
         const ext = mediaType.split('/').at(1) ?? 'png';
-        const path = p(
-          'downloads',
-          `gorkie-image-${batch}-${index + 1}.${ext}`
-        );
+        const path = p('downloads', `mark-image-${batch}-${index + 1}.${ext}`);
         await sandbox.retryOnDead(() =>
           sandbox.e2b.files.write(path, new Uint8Array(data).buffer)
         );
