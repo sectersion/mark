@@ -53,7 +53,10 @@ export const listThreadsTool = createTool({
       channelId: chId,
       currentThreadId: ctx.threadId,
     });
-    await joinChannel(chId);
+    await joinChannel({
+      channelId: chId,
+      requestContext: context?.requestContext,
+    });
 
     const result = await slack.listThreads(chId, { limit, cursor });
     return {

@@ -1,54 +1,13 @@
-import { SlackFormatConverter } from '@chat-adapter/slack';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { slack } from '../../chat/client';
-import { chat } from '../../chat/instance';
-import { resolveTarget, targetSchema } from '../../chat/target';
+import { postApprovalCard } from '../../chat/approvals';
+import { approval } from '../../config';
+import { createApproval } from '../../db/queries/approvals';
+import { auditSend } from '../../lib/audit-send';
 import { channelContext } from '../../lib/context';
-import { parseSlackId, rawId, threadIdOf } from '../../lib/ids';
+import { approvalPayloadSchemas, targetSchema } from '../../types';
 import { input, output } from '../../types/tools/index';
-import { assertCanPostTo, joinChannel } from './utils';
-
-const markdownConverter = new SlackFormatConverter();
-
-let cachedBotName: string | undefined;
-
-async function botDisplayName(botUserId: string | undefined): Promise<string> {
-  if (cachedBotName) {
-    return cachedBotName;
-  }
-  if (!botUserId) {
-    return 'gorkie';
-  }
-  const info = await slack.webClient.users
-    .info({ user: botUserId })
-    .catch(() => null);
-  const profile = info?.user?.profile;
-  const name = profile?.display_name || profile?.real_name || info?.user?.name;
-  if (!name) {
-    return 'gorkie';
-  }
-  cachedBotName = name;
-  return name;
-}
-
-async function resolveChannelAndThread(resolved: {
-  type: 'thread' | 'channel' | 'user';
-  id: string;
-}): Promise<{ channel: string; threadTs?: string }> {
-  if (resolved.type === 'thread') {
-    const { channel, ts } = parseSlackId(resolved.id);
-    if (!channel) {
-      throw new Error(`${resolved.id} is not a Slack thread id.`);
-    }
-    return { channel, threadTs: ts };
-  }
-  if (resolved.type === 'channel') {
-    return { channel: rawId(resolved.id) };
-  }
-  const dm = await resolveTarget(resolved);
-  return { channel: rawId(dm.id) };
-}
+import { isDirectTarget, sendMessage } from './utils';
 
 export const postMessageTool = createTool({
   id: 'post_message',
@@ -56,61 +15,51 @@ export const postMessageTool = createTool({
 
 Never use this to answer the current conversation, and never for status or progress updates in this thread: your normal assistant response, progress notes included, is already streamed here. Use this tool only when the user explicitly asks you to send something to a different thread, channel, or person (for example posting an update into another channel on their behalf).
 
-Channel and thread targets must be in the channel this conversation is already in; user targets must be the requester themselves. No exceptions to either, even if asked directly.
+Anything other than the current thread or the owner's own DM is not sent yet: it goes to the owner as an approval card and is posted exactly as written only if they approve. Tell the owner it is waiting on their approval; do not claim it was sent.
 
-Every post automatically uses the requester's Slack avatar and labels the sender as "Name [gorkie]". Do not add that attribution yourself in the message text; there is no way to override or customize it.
+Every post automatically uses the requester's Slack avatar and labels the sender as "Name [mark]". Do not add that attribution yourself in the message text; there is no way to override or customize it.
 
 Errors: channel_not_found usually means the bot isn't a member of that private channel; not_in_channel means it hasn't joined yet. Either way, tell the user to invite the bot there.`,
   inputSchema: input({
     target: targetSchema.describe(
       'Required destination outside the current conversation.'
     ),
-    message: z.string().min(1).describe('Markdown message body.'),
+    message: approvalPayloadSchemas.outbound_message.shape.text.describe(
+      'Markdown message body.'
+    ),
   }),
   outputSchema: output({
-    messageId: z.string(),
+    result: z.string(),
+    messageId: z.string().optional(),
     threadId: z.string().optional(),
   }),
   transform: {
     display: {
       output: ({ output }) => ({
-        summary: `Posted message ${output?.messageId ?? ''}`,
+        summary: output?.messageId
+          ? `Posted message ${output.messageId}`
+          : (output?.result ?? ''),
       }),
     },
   },
   execute: async ({ target, message }, context) => {
     const ctx = channelContext(context?.requestContext);
-    assertCanPostTo({ target, ctx });
-    try {
-      if (target.type !== 'user') {
-        await joinChannel(target.id);
-      }
-      const { channel, threadTs } = await resolveChannelAndThread(target);
-      const requesterUser = ctx.userId
-        ? await chat()
-            .getUser(ctx.userId)
-            .catch(() => null)
-        : null;
-      const requester = requesterUser?.userName ?? ctx.userName;
-      const bot = await botDisplayName(ctx.botUserId);
-      const credited = Boolean(requester) && target.type !== 'user';
-      const username = credited ? `${requester} [${bot}]` : bot;
-      const sent = await slack.webClient.chat.postMessage({
-        channel,
-        ...(threadTs ? { thread_ts: threadTs } : {}),
-        ...markdownConverter.toSlackPayload({ markdown: message }),
-        ...(credited && requesterUser?.avatarUrl
-          ? { icon_url: requesterUser.avatarUrl }
-          : {}),
-        username,
+    if (!(await isDirectTarget({ target, ctx }))) {
+      const created = await createApproval({
+        kind: 'outbound_message',
+        payload: { target, text: message },
+        requesterId: ctx.userId,
+        ttlMs: approval.ttl,
       });
-      if (!sent.ts) {
-        throw new Error('Slack posted the message without returning its id.');
-      }
-      return {
-        messageId: sent.ts,
-        threadId: threadTs ? threadIdOf({ channel, ts: threadTs }) : undefined,
-      };
+      await postApprovalCard({ approval: created });
+      return { result: "waiting on the owner's approval" };
+    }
+    try {
+      const sent = await sendMessage({ target, markdown: message, ctx });
+      await auditSend({
+        detail: { kind: 'message', target, messageId: sent.messageId },
+      });
+      return { result: 'sent', ...sent };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       if (reason.includes('channel_not_found')) {

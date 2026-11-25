@@ -1,50 +1,98 @@
-<div align="center">
-  <img alt="gorkie banner" src="./.github/banner.png" />
-  <h1>gorkie</h1>
-  <p>An AI assistant for Slack, built on Mastra.</p>
-</div>
+# mark
 
-## Introduction
+A personal assistant for one person, living in Slack. Built on
+[Mastra][mastra], forked from [gorkie][gorkie] by techwithanirudh.
 
-gorkie answers mentions, DMs, and subscribed threads, and runs code in a
-sandbox to get those answers. It also runs recurring scheduled tasks on its
-own.
+mark takes chores off the owner's plate: a daily engineering and news briefing,
+their schedule and meetings, and more over time. It runs in a Slack workspace
+under one bot identity and never posts as the owner.
 
-The bot is a long-lived Bun process. [Mastra][mastra]'s built-in
-[channels][channels] feature handles Slack events, wiring the [Vercel Chat
-SDK][chat-sdk] Slack adapter in Socket Mode while the agent runs on Mastra's
-native runtime. Each Slack thread gets its own [E2B][e2b] sandbox, so gorkie
-runs commands and inspects files without touching the host machine.
+## Status
 
-## Features
+Phase 1 (the foundation) is built on the `feat/mark-phase-1` branch: routing
+by sender, the receptionist, approval cards, the kill switch, the audit log,
+owner-scoped memory and standing rules, the outbound rule, the new voices,
+daily caps, and the operations runbook. The schedule, the briefing, and
+self-improvement are later phases. The design is in
+[docs/superpowers/specs/2026-11-24-mark-design.md](./docs/superpowers/specs/2026-11-24-mark-design.md)
+and the runbook in [docs/operations.md](./docs/operations.md).
 
-- Slack-native replies for mentions, DMs, and subscribed thread follow-ups,
-  streamed as they generate, with a typing indicator.
-- Optional opt-in allowlist (`OPT_IN_CHANNEL`): gate access to members of one
-  channel, with an in-Slack opt-in card for everyone else.
+## What mark is meant to be
+
+- **One Slack app, two agents, routed by sender.** Only the owner (matched by
+  Slack user ID) reaches **mark**, the privileged agent. Anyone else who pings
+  the app reaches the **receptionist**, which can take a message for the owner
+  and nothing else. Everything a non-owner says is treated as data, never as
+  instructions.
+- **Owns the schedule** (later phase). No external calendar. Events live in
+  Postgres, with `.ics` import and export.
+- **Daily briefing** (later phase). An engineering radar across the owner's
+  GitHub orgs plus news tuned to the owner's interests.
+- **Approval by DM card.** Messages for the owner, standing rules, and
+  anything mark would send to someone else wait for the owner to tap Approve.
+- **Learns and extends itself** (later phase). It remembers preferences, writes
+  its own skills, defines subagents, and can open pull requests against its
+  own code. It never merges them. Branch protection on `main` requires an
+  approving review.
+
+## What works today
+
+Built in Phase 1:
+
+- Routing by sender: only `OWNER_SLACK_USER_ID` reaches mark, and only in a DM
+  or a thread nobody else (no other person, bot, or app) has posted in.
+  Everyone else, and the owner in a thread with other people in it, gets the
+  receptionist. A followed thread only answers a stranger who mentions mark.
+- The receptionist: a separate agent whose only tool is `pass_to_owner`, rate
+  limited per person, which turns a request into an approval card in the
+  owner's DM. Approve or decline is told back to the requester.
+- Approval cards with Approve/Decline buttons that only the owner can press.
+  Cards expire after 24 hours (standing rules after 7 days). Mastra's own tool
+  approval buttons are owner-only too.
+- Outbound rule: posting anywhere other than the current thread or the
+  owner's own DM goes through an approval card and is sent exactly as
+  approved. Canvases refuse to mention anyone but the owner.
+- Kill switch: owner-only `!pause` and `!resume`. While paused, scheduled
+  tasks and GitHub writes stop and everyone else is told mark is offline.
+- Audit log in Postgres for everything mark does that touches someone else or
+  changes its behavior, readable by the owner through the `read_audit` tool.
+- Working memory scoped to the owner, and standing rules that only take
+  effect after the owner approves them (revoke them with the SQL in
+  `docs/operations.md`).
+- Daily caps (owner turns and receptionist replies) that alert the owner and
+  shut strangers out until Chicago midnight.
+- The Mastra HTTP server binds to loopback and rejects any non-loopback Host
+  or Origin; in production it serves no API at all.
+- App Home settings are owner-only; everyone else sees a front desk page.
+
+Inherited from gorkie, available to mark only:
+
+- Slack-native replies for mentions, DMs, and followed threads, streamed as
+  they generate, with a typing indicator.
 - Per-thread [E2B][e2b] sandbox sessions: isolated cloud VMs, never the host.
   Full filesystem access (`read_file`/`write_file`/`edit_file`/`list_files`/
   `delete_file`/`file_stat`) plus shell command execution
   (`execute_command`) with background process support (`get_process_output`,
   `kill_process`).
 - Delegated helper agents for research (Slack and web lookups) and codebase
-  exploration (read-only workspace inspection), so multi-step digging stays
-  out of the main conversation.
+  exploration (read-only workspace inspection).
 - Web search and page fetching via [Exa][exa], plus a Slack "code mode" tool
   for query-driven or exhaustive conversation analysis.
-- Slack-native tools: read/summarize conversation history, list threads and
-  channels, inspect channels and users, post to another thread/channel/DM,
-  upload and download files, react, leave a thread. It reads only the current
-  conversation and public channels, and DMs only the person who asked.
+- Slack-native tools: read and summarize conversation history, list threads
+  and channels, inspect channels and users, upload and download files, react,
+  leave a thread. It reads only the current conversation and public channels.
 - Slack Canvas tools: create, list, read, edit, and look up sections.
 - Recurring scheduled tasks (cron-based, create/list/pause/resume/delete).
-  Each run posts back into the conversation where it was scheduled.
+  Creating one needs the owner's approval. Each run posts back into the
+  conversation where it was scheduled.
+- GitHub tools and user-connected MCP servers.
 - AI image generation, uploaded back into the Slack thread as a file.
 - Most tools load on demand through tool search, so the base tool list and the
   prompt stay small.
 - [Observational Memory][om] compresses a long conversation into an
   observation log instead of carrying the full raw history.
-- Mastra Observability tracing, stored locally in DuckDB.
+- Mastra Observability tracing, stored locally in DuckDB in development and
+  sent to Langfuse.
 
 See [TODO.md](./TODO.md) for open work and known issues.
 
@@ -70,7 +118,7 @@ and model keys for both [Vercel AI Gateway][ai-gateway] and [Hack Club][hackclub
 
 ```bash
 # Clone this repository
-git clone https://github.com/techwithanirudh/gorkie.git
+git clone https://github.com/sectersion/mark.git
 
 # Install dependencies
 bun install
@@ -86,7 +134,7 @@ bun run dev
 ```
 
 Local development uses Slack Socket Mode, so the bot needs no public HTTP
-tunnel to receive Slack events. It logs `[gorkie] online` once connected.
+tunnel to receive Slack events. It logs `[agent] online` once connected.
 
 Do not run two local instances against the same Slack app token. Their Socket
 Mode connections race, and the resulting behavior is hard to diagnose.
@@ -104,8 +152,8 @@ local database named `gorkie`. Mastra creates its tables on first run.
 |---|---|---|
 | `SLACK_BOT_TOKEN` | yes | Bot User OAuth token (`xoxb-…`) |
 | `SLACK_APP_TOKEN` | yes | App-level token with `connections:write` (`xapp-…`) |
-| `SLACK_USER_TOKEN` | yes | Slack user token, not the bot token, used for public-channel search. Mint it with `search:read.public` only; gorkie verifies the granted scopes on first use and refuses the token if it also carries `search:read.im`, `search:read.mpim`, or `search:read.private`. See [docs/slack-search.md](docs/slack-search.md) |
-| `OPT_IN_CHANNEL` | no | Slack channel id gating access to members only (opt-in allowlist); unset means everyone is allowed |
+| `SLACK_USER_TOKEN` | yes | Slack user token, not the bot token, used for public-channel search. Mint it with `search:read.public` only; the code verifies the granted scopes on first use and refuses the token if it also carries `search:read.im`, `search:read.mpim`, or `search:read.private`. See [docs/slack-search.md](docs/slack-search.md) |
+| `OWNER_SLACK_USER_ID` | yes | Slack user id (`U…`) of the one person mark serves. Everyone else reaches the receptionist |
 | `AI_GATEWAY_API_KEY` | yes | Vercel AI Gateway key, used for the `vmc/gorkie` model config |
 | `HACKCLUB_API_KEY` | yes | Hack Club AI proxy key, the fallback and the image model |
 | `DATABASE_URL` | yes | Postgres connection string |
@@ -118,7 +166,6 @@ local database named `gorkie`. Mastra creates its tables on first run.
 | `GITHUB_APP_CLIENT_ID` | yes | GitHub App client id, for the App Home sign-in (see [docs/github-app.md](./docs/github-app.md)) |
 | `GITHUB_APP_CLIENT_SECRET` | yes | GitHub App client secret, used to refresh expiring user tokens |
 | `EXA_API_KEY` | yes | Exa key, powers `search_web`/`fetch_url` |
-| `AGENTMAIL_API_KEY` | no | Lets the sandbox reach the AgentMail API as `gorkie@agentmail.to`, without the key entering the sandbox |
 
 See [`.env.example`](./.env.example) for the full annotated list.
 
@@ -140,6 +187,8 @@ src/
     processors/                 Input/output processors (delegated tools, sandbox, tool media)
     prompts/                    System prompt sections (core, personality, Slack, tools)
     mcp/                        MCPClient scaffold for connecting external MCP servers
+workspace/skills/               Runtime skills, as SKILL.md folders
+docs/                           Setup notes and the mark design
 ```
 
 Constructing the Mastra instance registers the agent, which opens the Slack
@@ -157,10 +206,14 @@ bun run check           # Biome/ultracite
 bun run check:spelling
 ```
 
+`main` is protected: changes land through a pull request with one approving
+review, and force pushes and branch deletion are blocked.
+
 ## License
 
-[AGPL-3.0](./LICENSE)
+[AGPL-3.0](./LICENSE). Forked from [gorkie][gorkie].
 
+[gorkie]: https://github.com/techwithanirudh/gorkie
 [mastra]: https://mastra.ai
 [channels]: https://mastra.ai/docs/channels/overview
 [chat-sdk]: https://github.com/vercel/chat-sdk

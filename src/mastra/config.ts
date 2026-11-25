@@ -52,3 +52,26 @@ export const workingModel = {
 };
 
 export const emoji = { listTtl: 5 * 60 * 1000 };
+
+export const approval = {
+  ttl: 24 * 60 * 60 * 1000,
+  ruleTtl: 7 * 24 * 60 * 60 * 1000,
+};
+
+export const receptionist = {
+  id: 'receptionist',
+  maxMessages: 10,
+  windowMs: 10 * 60 * 1000,
+};
+
+// ponytail: count caps, not dollars; set dollar limits on the AI Gateway, E2B, and Exa dashboards by hand
+export const dailyCaps = {
+  ownerTurns: 500,
+  receptionistReplies: 200,
+  timeZone: 'America/Chicago',
+};
+
+// Mastra binds every interface when no host is set (@mastra/deployer
+// server/index.js `hostname: bindHost`), and its agent routes have no auth.
+// The port is pinned so the loopback Host and Origin allowlist matches it.
+export const server = { host: '127.0.0.1', port: 4111 };

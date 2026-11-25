@@ -1,5 +1,6 @@
 import { logger } from '../lib/logger';
 import { registerAppHome } from './app-home';
+import { registerApprovals } from './approvals';
 import { slack } from './client';
 import { content } from './content';
 import {
@@ -8,7 +9,6 @@ import {
   recordFeedbackDetails,
 } from './feedback';
 import { chat } from './instance';
-import { acceptOptIn } from './onboarding';
 
 export function registerEvents(): void {
   const bot = chat();
@@ -22,8 +22,7 @@ export function registerEvents(): void {
   );
 
   registerAppHome();
-
-  bot.onAction('opt_in_accept', acceptOptIn);
+  registerApprovals();
 
   bot.onAction(feedbackIds.action, onFeedbackClick);
   bot.onModalSubmit(feedbackIds.modal, (event) =>

@@ -8,14 +8,17 @@ import { MastraStorageExporter, Observability } from '@mastra/observability';
 import { env } from '@/env';
 import { exploreAgent as explore } from './agents/explore';
 import orchestrator from './agents/orchestrator';
+import { receptionist } from './agents/receptionist';
 import { researchAgent as research } from './agents/research';
 import { summarizer } from './agents/summarizer';
+import { sweepApprovals } from './chat/approvals';
 import { registerEvents } from './chat/events';
 import { setChat } from './chat/instance';
 import { setMastra } from './chat/mastra-instance';
+import { server } from './config';
 import { postgresStore, runMigrations } from './db';
-import { buildAllowlist } from './lib/allowed-users';
 import { logger } from './lib/logger';
+import { isAllowedRequest, loopbackOrigins } from './lib/loopback';
 import { LangfuseFeedbackExporter } from './observability/langfuse-feedback';
 import { slackIdentity } from './observability/slack-identity';
 
@@ -29,7 +32,24 @@ process.on('uncaughtException', (err: Error) => {
 const isProduction = env.NODE_ENV === 'production';
 
 export const mastra = new Mastra({
-  agents: { orchestrator, summarizer, research, explore },
+  agents: { orchestrator, summarizer, research, explore, receptionist },
+  server: {
+    ...server,
+    cors: { origin: loopbackOrigins },
+    middleware: async (c, next) => {
+      if (
+        !isAllowedRequest({
+          host: c.req.header('host'),
+          origin: c.req.header('origin'),
+          path: c.req.path,
+          production: isProduction,
+        })
+      ) {
+        return c.text('forbidden', 403);
+      }
+      await next();
+    },
+  },
   schedules: {
     prepare: async ({ mastra: runtime, schedule }) => {
       const current = await runtime.schedules.get(schedule.id);
@@ -86,14 +106,15 @@ setMastra(mastra);
 orchestrator
   .getChannels()
   ?.initialize(mastra)
-  .then(async () => {
+  .then(() => {
     const sdk = orchestrator.getChannels()?.sdk;
     if (!sdk) {
       return;
     }
     setChat(sdk);
     registerEvents();
-    await buildAllowlist();
+    // ponytail: setInterval, single process
+    setInterval(sweepApprovals, 5 * 60 * 1000);
     logger.info('[agent] online');
   })
   .catch((err: unknown) =>

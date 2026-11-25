@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { env } from '@/env';
+import { auditSend } from '../lib/audit-send';
 import { input, output } from '../types/tools/index';
 import { requireSandbox } from '../workspace';
 
@@ -89,6 +90,7 @@ export const uploadEmojiTool = createTool({
       );
     }
 
+    await auditSend({ detail: { kind: 'emoji', name, aliasFor } });
     return { name };
   },
 });

@@ -9,8 +9,7 @@ import {
 import { logger } from '../../../lib/logger';
 import { findMCPUrlError } from '../../../mcp/security';
 import { findMCPConnectionError } from '../../../mcp/user-servers';
-import { mcpServerSchema } from '../../../types';
-import { chat } from '../../instance';
+import { type AppHomeBot, mcpServerSchema } from '../../../types';
 import { ids, MAX_SERVERS } from './ids';
 import { decodePreset } from './presets';
 import { configureModal } from './views';
@@ -93,12 +92,12 @@ async function addServer({
 }
 
 export function registerMCPServers({
+  bot,
   publishHome,
 }: {
+  bot: AppHomeBot;
   publishHome: PublishHome;
 }): void {
-  const bot = chat();
-
   bot.onAction(ids.add, async (event) => {
     const servers = await listMCPServers(event.user.userId);
     if (servers.length >= MAX_SERVERS) {

@@ -1,112 +1,165 @@
-import type { Message, Thread } from 'chat';
-import { isUserAllowed } from '../lib/allowed-users';
+import type { Author, Message, Thread } from 'chat';
+import { writeAudit } from '../db/queries/audit';
 import { logger } from '../lib/logger';
+import { isOwner, isOwnerActor } from '../lib/owner';
+import { isPaused } from '../lib/pause';
+import { firstNotice } from '../lib/rate-limit';
+import { routeMessage } from '../lib/route';
+import type { CommandThread } from '../types';
 import { attachments } from './attachments';
+import { enforceDailyCaps } from './caps';
 import { slack } from './client';
 import { handleCommand } from './commands';
 import { withHistory } from './history';
-import { isComment } from './message';
-import { offerOptIn } from './onboarding';
-import { threadState } from './state';
+import { authorId, isAppPost, isComment } from './message';
+import { receptionistTurn } from './receptionist';
+import { taintThread, threadState } from './state';
 
-type DefaultHandler = (thread: Thread, message: Message) => Promise<void>;
+type RoutedThread = CommandThread &
+  Pick<Thread, 'channelId' | 'state' | 'setState' | 'mentionUser'> & {
+    messages: AsyncIterable<Message>;
+    post: (text: string) => Promise<unknown>;
+  };
+
+type DefaultHandler<T> = (thread: T, message: Message) => Promise<void>;
 
 function isFromBot(message: Message): boolean {
   return (
     message.author.isBot === true ||
     message.author.userId === 'USLACKBOT' ||
-    message.author.isMe === true
+    message.author.isMe === true ||
+    isAppPost(message)
   );
 }
 
-async function runTurn({
+async function respond<T extends RoutedThread>({
   defaultHandler,
   message,
   thread,
+  follow = false,
 }: {
-  defaultHandler: DefaultHandler;
+  defaultHandler: DefaultHandler<T>;
   message: Message;
-  thread: Thread;
+  thread: T;
+  follow?: boolean;
 }): Promise<void> {
-  logger.info('[chat] turn started', {
-    threadId: thread.id,
-    author: message.author.userName,
-    attachments: message.attachments.map((attachment) => ({
-      name: attachment.name,
-      mimeType: attachment.mimeType,
-      size: attachment.size,
-      url: attachment.url ?? attachment.fetchMetadata?.url,
-    })),
-    text: message.text,
+  const { text } = message;
+  const history = await withHistory({ message: attachments(message), thread });
+  const paused = (await isPaused()) || (await enforceDailyCaps());
+  const author = authorId(message);
+  const route = routeMessage({
+    authorId: author,
+    tainted: await taintThread({ thread, authorIds: history.authorIds }),
+    paused,
   });
 
-  await defaultHandler(
-    thread,
-    await withHistory({ message: attachments(message), thread })
+  if (route === 'offline') {
+    if (
+      firstNotice({ key: `offline:${message.author.userId}`, now: Date.now() })
+    ) {
+      await thread.post('mark is offline.');
+    }
+    return;
+  }
+  if (route === 'receptionist') {
+    if (isOwner(author)) {
+      await thread.post(
+        "that thread has other people in it, so i'm treating it as public. dm me to talk properly."
+      );
+    }
+    try {
+      await receptionistTurn({
+        thread,
+        message: { id: message.id, text, author: message.author },
+      });
+    } catch (error) {
+      logger.error('[chat] receptionist turn failed', {
+        error,
+        threadId: thread.id,
+      });
+    }
+    return;
+  }
+
+  await writeAudit({ actor: 'owner', action: 'turn' }).catch((error: unknown) =>
+    logger.error('[chat] could not audit an owner turn', { error })
   );
+
+  if (follow) {
+    await thread.setState({ respondOnThreadMessages: true });
+  }
+  if (await handleCommand({ message, thread })) {
+    return;
+  }
+  // Ids and sizes only: message text stays out of logs, as in the audit rows.
+  logger.info('[chat] turn started', {
+    threadId: thread.id,
+    messageId: message.id,
+    textLength: text.length,
+    attachments: message.attachments.length,
+  });
+  await defaultHandler(thread, history.message);
   // Only a turn that finished has seen the backfill; a failed one retries it.
   if (!thread.isDM) {
     await thread.setState({ lastSeenMessage: message.id });
   }
 }
 
-export async function onMention(
-  thread: Thread,
+export async function onMention<T extends RoutedThread>(
+  thread: T,
   message: Message,
-  defaultHandler: DefaultHandler
+  defaultHandler: DefaultHandler<T>
 ): Promise<void> {
+  await taintThread({ thread, authorIds: [authorId(message)] });
   if (isFromBot(message)) {
     return;
   }
-  if (!(await isUserAllowed(message.author.userId))) {
-    await offerOptIn({ thread, user: message.author });
-    return;
-  }
-  if (slack.decodeThreadId(message.threadId).threadTs === message.id) {
-    await thread.setState({ respondOnThreadMessages: true });
-  }
-  if (await handleCommand({ message, thread })) {
-    return;
-  }
-  await runTurn({ defaultHandler, message, thread });
+  await respond({
+    defaultHandler,
+    message,
+    thread,
+    follow: slack.decodeThreadId(message.threadId).threadTs === message.id,
+  });
 }
 
-export async function onSubscribedMessage(
-  thread: Thread,
+export async function onSubscribedMessage<T extends RoutedThread>(
+  thread: T,
   message: Message,
-  defaultHandler: DefaultHandler
+  defaultHandler: DefaultHandler<T>
 ): Promise<void> {
+  await taintThread({ thread, authorIds: [authorId(message)] });
   if (isFromBot(message) || isComment(message)) {
     return;
   }
+  // A followed thread answers only the owner unprompted; anyone else has to
+  // address mark, or every stranger reply in the thread would get one.
   const state = await threadState(thread);
-  const isFollowingThread = state?.respondOnThreadMessages === true;
-  if (!(isFollowingThread || message.isMention)) {
+  const isFollowingThread =
+    state?.respondOnThreadMessages === true && isOwner(authorId(message));
+  if (!(isFollowingThread || message.isMention || thread.isDM)) {
     return;
   }
-  if (!(await isUserAllowed(message.author.userId))) {
-    return;
-  }
-  if (await handleCommand({ message, thread })) {
-    return;
-  }
-  await runTurn({ defaultHandler, message, thread });
+  await respond({ defaultHandler, message, thread });
 }
 
-export async function onDirectMessage(
-  thread: Thread,
+// Mastra's built-in tool approval buttons resume the run as whoever pressed
+// them, so only the owner's presses reach the default handler.
+export async function onAction(
+  event: { user: Pick<Author, 'userId' | 'isBot'> | undefined },
+  defaultHandler: () => Promise<void>
+): Promise<void> {
+  if (isOwnerActor(event.user)) {
+    await defaultHandler();
+  }
+}
+
+export async function onDirectMessage<T extends RoutedThread>(
+  thread: T,
   message: Message,
-  defaultHandler: DefaultHandler
+  defaultHandler: DefaultHandler<T>
 ): Promise<void> {
   if (isFromBot(message)) {
     return;
   }
-  if (!(await isUserAllowed(message.author.userId))) {
-    await offerOptIn({ thread, user: message.author });
-    return;
-  }
-  if (await handleCommand({ message, thread })) {
-    return;
-  }
-  await runTurn({ defaultHandler, message, thread });
+  await respond({ defaultHandler, message, thread });
 }

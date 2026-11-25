@@ -1,7 +1,7 @@
 {
   "display_information": {
-    "name": "gorkie",
-    "description": "gork but big brain",
+    "name": "mark",
+    "description": "a lazy but sharp personal assistant",
     "background_color": "#000000"
   },
   "features": {
@@ -11,11 +11,11 @@
       "messages_tab_read_only_enabled": false
     },
     "bot_user": {
-      "display_name": "gorkie",
+      "display_name": "mark",
       "always_online": true
     },
     "agent_view": {
-      "agent_description": "Your AI assistant for Slack. Searches the web, writes and runs code, generates images, browses websites, manages scheduled tasks, and more."
+      "agent_description": "A personal assistant for Slack. Does the minimum that works, searches the web and Slack, writes and runs code, keeps scheduled tasks, and says what is done, what is waiting on you, and what it guessed."
     }
   },
   "oauth_config": {

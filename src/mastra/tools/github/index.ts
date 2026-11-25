@@ -4,6 +4,7 @@ import { githubAccess, githubAccessToken } from '../../lib/github';
 import { logger } from '../../lib/logger';
 import { asksBefore } from '../../types';
 import { ALLOWLIST, isWriteTool } from './allowlist';
+import { auditIfWrite } from './audit';
 import { checkoutTool } from './checkout';
 import { handoff } from './handoff';
 import { pushTool } from './push';
@@ -26,7 +27,7 @@ export async function githubTools({
     if (access.state !== 'connected') {
       return {};
     }
-    const { credential, direct, level } = access;
+    const { credential, direct, level, paused } = access;
 
     const built = createGithubTools({
       token: async () => {
@@ -46,6 +47,9 @@ export async function githubTools({
       if (name === 'forkRepository' && credential.kind !== 'pat') {
         continue;
       }
+      if (paused && isWriteTool(name)) {
+        continue;
+      }
       // The SDK's formatter is AI SDK shaped; Mastra hands it the result alone.
       const { toModelOutput: format, ...tool } = built[name];
       const id = `github_${name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase()}`;
@@ -63,7 +67,7 @@ export async function githubTools({
         continue;
       }
       tools[id] = {
-        ...tool,
+        ...auditIfWrite({ name, tool }),
         needsApproval: asksBefore({
           kind: isWriteTool(name) ? 'write' : 'read',
           level,
@@ -81,11 +85,13 @@ export async function githubTools({
         approval: !isDM || asksBefore({ kind: 'read', level }),
         userId,
       });
-      tools.github_push_branch = pushTool({
-        approval: asksBefore({ kind: 'write', level }),
-        canFork: credential.kind === 'pat',
-        userId,
-      });
+      if (!paused) {
+        tools.github_push_branch = pushTool({
+          approval: asksBefore({ kind: 'write', level }),
+          canFork: credential.kind === 'pat',
+          userId,
+        });
+      }
     }
     return tools;
   } catch (error) {

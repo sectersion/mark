@@ -10,8 +10,8 @@ import {
   verifyGitHubPat,
 } from '../../../lib/github';
 import { logger } from '../../../lib/logger';
+import type { AppHomeBot } from '../../../types';
 import { slack } from '../../client';
-import { chat } from '../../instance';
 import { ids } from './ids';
 import {
   type ConnectMethod,
@@ -177,7 +177,7 @@ async function switchMethod({
         method,
         warning: pending
           ? undefined
-          : 'Gorkie restarted, so this code is stale. Press Cancel and start again, or paste a token below.',
+          : 'mark restarted, so this code is stale. Press Cancel and start again, or paste a token below.',
       }),
     });
   } catch (error) {
@@ -240,12 +240,12 @@ async function finishDeviceLogin(userId: string) {
 }
 
 export function registerConnect({
+  bot,
   publishHome,
 }: {
+  bot: AppHomeBot;
   publishHome: PublishHome;
 }): void {
-  const bot = chat();
-
   bot.onAction(ids.connect, (event) =>
     openConnect({
       publishHome,

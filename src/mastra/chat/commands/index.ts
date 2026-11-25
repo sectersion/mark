@@ -1,14 +1,17 @@
-import type { Message, Thread } from 'chat';
-import type { CommandHandler } from '../../types';
+import type { Message } from 'chat';
+import type { CommandHandler, CommandThread } from '../../types';
 import { rawText, withoutLeadingMentions } from '../message';
 import { connections } from './connections';
 import { help } from './help';
+import { pause, resume } from './pause';
 import { stop } from './stop';
 
 const commands: Record<string, CommandHandler> = {
   connections,
   help,
   mcps: connections,
+  pause,
+  resume,
   stop,
 };
 
@@ -17,7 +20,7 @@ export async function handleCommand({
   thread,
 }: {
   message: Message;
-  thread: Thread;
+  thread: CommandThread;
 }): Promise<boolean> {
   const body = withoutLeadingMentions(rawText(message)).trim();
   const match = body.match(/^!(\w+)\b/i);

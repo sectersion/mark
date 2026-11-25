@@ -1,19 +1,18 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
+import { auditSend } from '../../lib/audit-send';
 import { channelContext } from '../../lib/context';
 import { input, output } from '../../types/tools/index';
-import { assertReadableResource } from '../slack/utils';
-import { canvasIdSchema } from './utils';
+import { canPostDirect, ownerDmChannelId } from '../slack/utils';
+import { assertNoThirdPartyMentions, canvasIdSchema } from './utils';
 
 const markdownContentSchema = z.object({
   type: z.literal('markdown').default('markdown'),
   markdown: z
     .string()
     .min(1)
-    .describe(
-      'Markdown canvas content. Mentions use canvas-specific syntax, not regular message mentions: ![](@USER_ID) for a user, ![](#CHANNEL_ID) for a channel. <@U123> renders as literal plain text in a canvas.'
-    ),
+    .describe('Markdown canvas content, with no mentions of people.'),
 });
 
 const canvasChangeSchema = z.discriminatedUnion('operation', [
@@ -49,7 +48,7 @@ const canvasChangeSchema = z.discriminatedUnion('operation', [
 export const editCanvasTool = createTool({
   id: 'edit_canvas',
   description:
-    'Edit a Slack canvas by applying ordered markdown changes: insert, replace, or delete sections. Use lookup_canvas_sections to find section ids first. Canvas mentions use ![](@USER_ID) and ![](#CHANNEL_ID), not <@U123>.',
+    "Edit a Slack canvas by applying ordered markdown changes: insert, replace, or delete sections. Only canvases shared in the owner's own DM, and nowhere else, can be edited. Use lookup_canvas_sections to find section ids first. Do not mention people in canvas markdown: a mention notifies them, so one of anyone but the owner is refused.",
   inputSchema: input({
     canvasId: canvasIdSchema,
     changes: z.tuple([canvasChangeSchema]).rest(canvasChangeSchema),
@@ -63,15 +62,37 @@ export const editCanvasTool = createTool({
     },
   },
   execute: async ({ canvasId, changes }, context) => {
+    for (const change of changes) {
+      if ('document_content' in change) {
+        assertNoThirdPartyMentions(change.document_content.markdown);
+      }
+    }
     const info = await slack.webClient.files.info({ file: canvasId });
     const ctx = channelContext(context.requestContext);
-    await assertReadableResource({
-      channelIds: [
-        ...(info.file?.channels ?? []),
-        ...(info.file?.groups ?? []),
-      ],
-      currentThreadId: ctx.threadId,
-    });
+    const ownerDm = await ownerDmChannelId();
+    const sharedIn = [
+      ...(info.file?.channels ?? []),
+      ...(info.file?.groups ?? []),
+      ...(info.file?.ims ?? []),
+    ];
+    // An edit is visible to everyone the canvas is shared with and cannot wait
+    // on the owner's approval, so only a canvas shared in the owner's own DM
+    // alone is editable.
+    if (
+      sharedIn.length === 0 ||
+      !sharedIn.every((channelId) =>
+        canPostDirect({
+          targetThreadId: undefined,
+          targetChannelId: channelId,
+          currentThreadId: ctx.threadId,
+          ownerDmChannelId: ownerDm,
+        })
+      )
+    ) {
+      throw new Error(
+        "Only canvases shared in the owner's own DM, and nowhere else, can be edited."
+      );
+    }
     try {
       await slack.webClient.canvases.edit({
         canvas_id: canvasId,
@@ -87,6 +108,7 @@ export const editCanvasTool = createTool({
       }
       throw error;
     }
+    await auditSend({ detail: { kind: 'canvas_edit', canvasId } });
     return { canvasId };
   },
 });

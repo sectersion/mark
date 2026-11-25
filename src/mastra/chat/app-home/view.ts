@@ -3,6 +3,7 @@ import { listMCPServers } from '../../db/queries/mcps';
 import { getGitHubSettings, getInstructions } from '../../db/queries/settings';
 import { countInstallations } from '../../lib/github';
 import { logger } from '../../lib/logger';
+import { isOwner } from '../../lib/owner';
 import type { GitHubCredential } from '../../types';
 import { slack } from '../client';
 import { content } from '../content';
@@ -82,5 +83,8 @@ async function buildHomeView(userId: string): Promise<Record<string, unknown>> {
 }
 
 export async function publishHome(userId: string): Promise<void> {
-  await slack.publishHomeView(userId, await buildHomeView(userId));
+  await slack.publishHomeView(
+    userId,
+    isOwner(userId) ? await buildHomeView(userId) : content.frontDesk
+  );
 }

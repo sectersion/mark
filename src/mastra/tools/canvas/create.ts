@@ -1,15 +1,17 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
+import { auditSend } from '../../lib/audit-send';
 import { channelContext } from '../../lib/context';
 import { rawId } from '../../lib/ids';
 import { input, output } from '../../types/tools/index';
-import { assertCanManageChannel } from './utils';
+import { isDirectTarget } from '../slack/utils';
+import { assertNoThirdPartyMentions } from './utils';
 
 export const createCanvasTool = createTool({
   id: 'create_canvas',
   description:
-    'Create either a standalone Slack canvas or the Canvas tab for a channel. A channel canvas defaults to the current channel and fails if that channel already has one. A standalone canvas can optionally be shared with the current channel. Canvas markdown uses ![](@USER_ID) for user mentions and ![](#CHANNEL_ID) for channel mentions. Regular Slack message syntax such as <@U123> and <#C123> renders as literal text in a canvas.',
+    "Create either a standalone Slack canvas or the Canvas tab for a channel. A channel canvas defaults to the current channel and fails if that channel already has one. A standalone canvas can optionally be shared with a channel. Sharing into any channel other than the owner's own DM is refused. Do not mention people in canvas markdown: a mention notifies them, so one of anyone but the owner is refused.",
   inputSchema: input({
     mode: z.enum(['standalone', 'channel']).default('standalone'),
     title: z.string().min(1).optional(),
@@ -17,14 +19,14 @@ export const createCanvasTool = createTool({
       .string()
       .optional()
       .describe(
-        'Current channel id (slack:C...). For channel mode, defaults to the current channel. For standalone mode, shares the new canvas into that channel.'
+        "Channel id (slack:C...), only the owner's own DM. For channel mode, defaults to the current channel. For standalone mode, shares the new canvas into that channel."
       ),
     markdown: z
       .string()
       .min(1)
       .optional()
       .describe(
-        'Initial canvas content as Markdown. For a user mention, write ![](@U123ABC). For a channel mention, write ![](#C123ABC). Do not write <@U123ABC> or <#C123ABC>; message mention syntax renders as literal text in canvases.'
+        'Initial canvas content as Markdown, with no mentions of people.'
       ),
   }),
   outputSchema: output({
@@ -40,11 +42,26 @@ export const createCanvasTool = createTool({
     },
   },
   execute: async ({ mode, title, channelId, markdown }, context) => {
+    if (markdown) {
+      assertNoThirdPartyMentions(markdown);
+    }
     const ctx = channelContext(context?.requestContext);
+    const targetChannelId =
+      mode === 'channel' ? (channelId ?? ctx.channelId) : channelId;
+    // A canvas cannot wait on the owner's approval, so one shared anywhere but
+    // the owner's own DM is refused outright.
+    if (
+      targetChannelId &&
+      !(await isDirectTarget({
+        target: { type: 'channel', id: targetChannelId },
+        ctx,
+      }))
+    ) {
+      throw new Error(
+        "Canvases can only be shared into the owner's own DM. Create a standalone canvas without a channel instead."
+      );
+    }
     if (mode === 'standalone') {
-      if (channelId) {
-        assertCanManageChannel({ channelId, ctx });
-      }
       const response = await slack.webClient.canvases.create({
         ...(title ? { title } : {}),
         ...(channelId ? { channel_id: rawId(channelId) } : {}),
@@ -55,6 +72,14 @@ export const createCanvasTool = createTool({
       if (!response.canvas_id) {
         throw new Error('Slack created the canvas without returning its id.');
       }
+      await auditSend({
+        detail: {
+          kind: 'canvas_create',
+          mode,
+          canvasId: response.canvas_id,
+          channelId,
+        },
+      });
       return {
         mode,
         canvasId: response.canvas_id,
@@ -62,11 +87,9 @@ export const createCanvasTool = createTool({
       };
     }
 
-    const targetChannelId = channelId ?? ctx.channelId;
     if (!targetChannelId) {
       throw new Error('No channel to create a channel canvas for.');
     }
-    assertCanManageChannel({ channelId: targetChannelId, ctx });
     try {
       const response = await slack.webClient.conversations.canvases.create({
         channel_id: rawId(targetChannelId),
@@ -80,6 +103,14 @@ export const createCanvasTool = createTool({
           'Slack created the channel canvas without returning its id.'
         );
       }
+      await auditSend({
+        detail: {
+          kind: 'canvas_create',
+          mode,
+          canvasId: response.canvas_id,
+          channelId: targetChannelId,
+        },
+      });
       return {
         mode,
         channelId: `slack:${rawId(targetChannelId)}`,
